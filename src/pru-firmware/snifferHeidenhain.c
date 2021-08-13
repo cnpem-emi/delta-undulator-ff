@@ -42,6 +42,7 @@ void dummyCycles(uint8_t nCycles, uint16_t samplingEdge);
 uint32_t readBits(uint8_t nBits, uint16_t samplingEdge);
 
 
+
 void main(){
 
    // Clear SYSCFG[STANDBY_INIT] to enable OCP master port->Shared memory
@@ -52,11 +53,10 @@ void main(){
    shram[0] = 0xED;
    shram[1] = 0xDEADBEEF;
    shram[2] = 0;
+   shram[3] = 1;
 
    // General variables
-   uint32_t modeCommand=0;
-   uint16_t wait=0, loop=0;
-   //uint8_t index=0;
+   uint8_t  loop=0;
 
   /* GPI Mode 0, GPO Mode 0 */
    CT_CFG.GPCFG0 = 0;
@@ -64,9 +64,9 @@ void main(){
    while(1){
 
        // Start on a beginning of communication. Wait clock HIGH for, at least, 30 us
-       for(loop=1; loop!=0; loop++)
+       for(loop=1; loop!=100; loop++)
        {
-           if(CLK_ENDAT == 0)
+           if(CLK_ENDAT == 1)
            {
                // Reset loop counting
                loop = 1;
@@ -88,48 +88,50 @@ void main(){
        // Get Mode Command
        if(continue_allowed)
        {
-           modeCommand = readBits(8, RISING_EDGE);
+           shram[0] = readBits(8, RISING_EDGE);
        }
 
        // ----------------------------------------
        // Wait START OF REPLY - DATA _|
-       if (DATA_ENDAT != 0)
+       for(loop=1; loop!=100; loop++)
        {
-           while(DATA_ENDAT != 0)
+           if(DATA_ENDAT == 1)
            {
+               break;
            }
+           continue_allowed = 0;
        }
-       while(DATA_ENDAT == 0)
+
+       // Wait clock LOW
+       for(loop=1; loop!=100; loop++)
        {
+           if(CLK_ENDAT == 0)
+           {
+               break;
+           }
+           continue_allowed = 0;
        }
+       continue_allowed = 1;
+
+       // Skip two clock cycles - Error Flags
+       dummyCycles(2, RISING_EDGE);
+
 
        // ----------------------------------------
-       // Get Data (position value)
+       // Get Data (position value) + CRC
        if(continue_allowed)
        {
-           modeCommand = readBits(8, RISING_EDGE);
+           // Set mutex
+           shram[4] = 0;
+           // Acquire POSITION
+           shram[1] = readBits(32, FALLING_EDGE);
+           shram[2] = readBits(3, FALLING_EDGE);
+           // Acquire CRC
+           shram[3] = readBits(5, FALLING_EDGE);
+           // Clear mutex
+           shram[4] = 1;
        }
-
-
-
-
-/*
-
-       if(DATA_ENDAT == 0)
-       {
-       asm(" SET R30.t1\n");// CLR R30.t3\n SET R30.t3\n");
        //__delay_cycles(100000000); // half-second delay
-
-       //shram[2]++;
-
-       __R30 ^= 0xFF;
-       //__delay_cycles(100000000); // half-second delay
-       }
-       else
-       {
-           asm(" CLR R30.t1\n");
-       }
-   */
    }
 }
 
@@ -184,6 +186,7 @@ uint32_t readBits(uint8_t nBits, uint16_t samplingEdge)
                }
 
                // GET DATA INFO
+
                data = (data << 1) + DATA_ENDAT;
 
                // Wait complementary

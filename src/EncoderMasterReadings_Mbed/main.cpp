@@ -125,7 +125,7 @@ int main() {
             valor = readHeidenhain();
             printf("Position = %llu (0x%09llX)\n\n\n\r", valor, valor);
         }
-        wait(1.0);
+        wait_us(1000);
         
     }
 }
