@@ -39,9 +39,9 @@ class encoderHeidenhain:
             pru_data[PRUS[self.pru]["subsystem"]][1] = PRUS[self.pru]["clk_t"]
             pru_data[PRUS[self.pru]["subsystem"]][2] = PRUS[self.pru]["data_t"]
 
-            os.system("echo 'stop' > /sys/class/remoteproc/remoteproc{}}/state".format(PRUS[self.pru]["remoteproc"]))
-            os.system("echo 'encoder.out' > /sys/class/remoteproc/remoteproc{}}/firmware".format(PRUS[self.pru]["remoteproc"]))
-            os.system("echo 'start' > /sys/class/remoteproc/remoteproc{}}/state".format(PRUS[self.pru]["remoteproc"]))
+            os.system("echo 'stop' > /sys/class/remoteproc/remoteproc{}/state".format(PRUS[self.pru]["remoteproc"]))
+            os.system("echo 'encoder.out' > /sys/class/remoteproc/remoteproc{}/firmware".format(PRUS[self.pru]["remoteproc"]))
+            os.system("echo 'start' > /sys/class/remoteproc/remoteproc{}/state".format(PRUS[self.pru]["remoteproc"]))
             #self.position = self.getPosition()
         else:
             raise ValueError('PRU number is not available !')

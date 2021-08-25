@@ -5,7 +5,6 @@
  * 1-channel sniffer
  *
  * To be run on a BeagleBone-AI PRU.
- * THIS FIRST VERSION IS TO BE RUN ON PRU 2_0 (THIRD PRU = REMOTEPROC6)
  *
  *
  * Under development
@@ -21,17 +20,6 @@
 #include <pru_intc.h>
 #include "resource_table_empty.h"
 
-
-// -----------------------------------------------
-// For compiling for a different PRU
-// EDIT HERE ONLY
-// -----------------------------------------------
-//#define subsystemPRU            1   // 1 or 2
-//#define devPRU                  1   // 0 or 1
-
-#define CLK_ENDAT               ((__R31 >> tbit_c) & 0x01)
-#define DATA_ENDAT              ((__R31 >> tbit_d) & 0x01)
-// -----------------------------------------------
 
 
 volatile register uint32_t __R31;
@@ -77,7 +65,18 @@ void main(){
    tbit_c = (shram[0] >> 8) & 0xFF;
    tbit_d = (shram[0] >> 16) & 0xFF;
 
-   shram[0] = 0;
+   // INVALID INITIALIZATION - MSByte gets 0xFF
+   if((subsystemPRU > 2) | (subsystemPRU == 0))
+   {
+       shram[0] = shram[0] | 0xFF000000;
+   }
+   else
+   {
+       shram[0] = 0;
+   }
+
+
+
 
    offsetCommand = (devPRU * 8) + 1;
    offsetPosL = (devPRU * 8) + 2;
@@ -86,6 +85,8 @@ void main(){
    offsetMutex = (devPRU * 8) + 5;
 
    unit = ((subsystemPRU - 1)*2) + devPRU;
+   shram[20] = tbit_c + (tbit_d << 8) + (unit << 16);
+
 
    switch(unit)
    {
@@ -107,7 +108,6 @@ void main(){
        break;
    }
 
-   shram[20] = tbit_c + (tbit_d << 8) + (unit << 16);
 
 
 
