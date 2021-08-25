@@ -3,14 +3,10 @@
 """
 
 
-[00..03] Command
-[04..07] Position LSB (L..M)
-[08..11] Position MSB (L..M)
-[12..15] CRC
-[16..19] Mutex
 """
 
 import mmap
+import os
 
 
 
@@ -21,17 +17,17 @@ SHRAM_OFFSET = 0x00010000
 
 # ----- Available PRUs
 PRUS = {
-        0:{"subsystem":1, "posShramOffset":4}, 
-        1:{"subsystem":1, "posShramOffset":24}, 
-        2:{"subsystem":2, "posShramOffset":4}, 
-        3:{"subsystem":2, "posShramOffset":24}
+        0:{"remoteproc":4, "subsystem":1, "device":0, "posShramOffset":8  , "clk_t": 17, "data_t":  5}, 
+        1:{"remoteproc":5, "subsystem":1, "device":1, "posShramOffset":40 , "clk_t": 18, "data_t":  9}, 
+        2:{"remoteproc":6, "subsystem":2, "device":0, "posShramOffset":8  , "clk_t":  4, "data_t":  3}, 
+        3:{"remoteproc":7, "subsystem":2, "device":1, "posShramOffset":40 , "clk_t": 10, "data_t": 11}
         }
 
 # ----- Open memory mapping
-fd = open("/dev/mem", "r")
+fd = os.open("/dev/mem", os.O_RDWR)
 pru_data = {
-            1:mmap.mmap(fd.fileno(), length=0x1000, access=mmap.ACCESS_READ, offset=(PRU1_ADDR + SHRAM_OFFSET)),
-            2:mmap.mmap(fd.fileno(), length=0x1000, access=mmap.ACCESS_READ, offset=(PRU2_ADDR + SHRAM_OFFSET))
+            1:mmap.mmap(fd, length=0x1000, access=mmap.ACCESS_WRITE, offset=(PRU1_ADDR + SHRAM_OFFSET)),
+            2:mmap.mmap(fd, length=0x1000, access=mmap.ACCESS_WRITE, offset=(PRU2_ADDR + SHRAM_OFFSET))
             }
 
 
@@ -39,7 +35,14 @@ class encoderHeidenhain:
     def __init__(self, pru_num):
         if pru_num in PRUS.keys():
             self.pru = pru_num
-            self.position = self.getPosition()
+            pru_data[PRUS[self.pru]["subsystem"]][0] = (PRUS[self.pru]["subsystem"] << 1) + PRUS[self.pru]["device"]
+            pru_data[PRUS[self.pru]["subsystem"]][1] = PRUS[self.pru]["clk_t"]
+            pru_data[PRUS[self.pru]["subsystem"]][2] = PRUS[self.pru]["data_t"]
+
+            os.system("echo 'stop' > /sys/class/remoteproc/remoteproc{}}/state".format(PRUS[self.pru]["remoteproc"]))
+            os.system("echo 'encoder.out' > /sys/class/remoteproc/remoteproc{}}/firmware".format(PRUS[self.pru]["remoteproc"]))
+            os.system("echo 'start' > /sys/class/remoteproc/remoteproc{}}/state".format(PRUS[self.pru]["remoteproc"]))
+            #self.position = self.getPosition()
         else:
             raise ValueError('PRU number is not available !')
     
@@ -57,7 +60,7 @@ class encoderHeidenhain:
         return int(_binaryData, 2)
 
     def getMemory(self, offset):
-        if(pru_data[PRUS[self.pru]["subsystem"]][16] == 0):
+        if(pru_data[PRUS[self.pru]["subsystem"]][20] == 0):
             return 2
         else:
             return pru_data[PRUS[self.pru]["subsystem"]][offset]
