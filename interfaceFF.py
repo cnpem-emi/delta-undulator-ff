@@ -9,7 +9,6 @@ import mmap
 import os
 
 
-
 # ----- ADDRESS AND OFFSETS - AM572x
 PRU1_ADDR = 0x4b200000
 PRU2_ADDR = 0x4b280000
@@ -39,6 +38,7 @@ class encoderHeidenhain:
             pru_data[PRUS[self.pru]["subsystem"]][1] = PRUS[self.pru]["clk_t"]
             pru_data[PRUS[self.pru]["subsystem"]][2] = PRUS[self.pru]["data_t"]
 
+            os.system("cp Teste-PRU.out /lib/firmware/encoder.out")
             os.system("echo 'stop' > /sys/class/remoteproc/remoteproc{}/state".format(PRUS[self.pru]["remoteproc"]))
             os.system("echo 'encoder.out' > /sys/class/remoteproc/remoteproc{}/firmware".format(PRUS[self.pru]["remoteproc"]))
             os.system("echo 'start' > /sys/class/remoteproc/remoteproc{}/state".format(PRUS[self.pru]["remoteproc"]))
@@ -61,11 +61,9 @@ class encoderHeidenhain:
 
     def getMemory(self, offset):
         if(pru_data[PRUS[self.pru]["subsystem"]][20] == 0):
-            return 2
+            return 'busy'
         else:
             return pru_data[PRUS[self.pru]["subsystem"]][offset]
-
-
 
 if __name__ == "__main__":
     exit()
