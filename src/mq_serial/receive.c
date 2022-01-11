@@ -3,7 +3,6 @@
 #include <termios.h>
 #include <unistd.h>
 #include <mqueue.h>
-#include "msgqueue.h"
 
 #define BAUD B115200
 

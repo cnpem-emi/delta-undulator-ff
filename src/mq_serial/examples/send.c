@@ -2,7 +2,6 @@
 #include <sys/stat.h>
 #include <mqueue.h>
 #include <string.h>
-#include "msgqueue.h"
 
 int main()
 {
