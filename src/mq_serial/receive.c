@@ -55,9 +55,9 @@ int main()
         write(fd, cmd_buf, write_size);
         reply_size = read(fd, &reply_buf, sizeof(reply_buf));
         if(priority == 0)
-            mq_send(reply_ff, reply_buf, reply_size, 0);
+            mq_send(reply_ff, reply_buf, reply_size, priority);
         else
-            mq_send(reply_ff, reply_size < 0 ? "\xee" : "\xff", 1, 0);
+            mq_send(reply_ff, reply_size < 0 ? "\xee" : "\xff", 1, priority);
     }
 
     //TODO: Close out elegantly
