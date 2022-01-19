@@ -13,7 +13,7 @@ int main()
 
     struct mq_attr attr;
 
-    attr.mq_maxmsg = 128;
+    attr.mq_maxmsg = 1000;
     attr.mq_msgsize = 32;
     attr.mq_flags = 0;
 
