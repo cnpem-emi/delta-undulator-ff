@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <mqueue.h>
 
-#define BAUD B115200
+#define BAUD B3000000
 
 
 int main()
