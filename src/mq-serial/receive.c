@@ -35,8 +35,8 @@ int main()
     tty.c_iflag &= ~(IXON | IXOFF | IXANY);
     tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL);
 
-    tty.c_cc[VTIME] = 1;
-    tty.c_cc[VMIN] = 1;
+    tty.c_cc[VTIME] = 0;
+    tty.c_cc[VMIN] = 0;
 
     cfsetispeed(&tty, BAUD);
     cfsetospeed(&tty, BAUD);
