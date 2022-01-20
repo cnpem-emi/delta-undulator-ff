@@ -17,8 +17,10 @@ int main()
     attr.mq_msgsize = 32;
     attr.mq_flags = 0;
 
-    mqd_t cmd_ff = mq_open("/cmd_ff", (O_RDWR | O_CREAT), 0666, &attr);
+    mqd_t cmd_mq = mq_open("/cmd_mq", (O_RDWR | O_CREAT), 0666, &attr);
+    mqd_t reply_ioc = mq_open("/reply_ioc", (O_RDWR | O_CREAT), 0666, &attr);
     mqd_t reply_ff = mq_open("/reply_ff", (O_RDWR | O_CREAT), 0666, &attr);
+
 
     fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY | O_NDELAY); // TODO: Handle errors
     struct termios tty;
@@ -55,7 +57,7 @@ int main()
 
     for (;;)
     {
-        write_size = mq_receive(cmd_ff, cmd_buf, sizeof(cmd_buf), &priority);
+        write_size = mq_receive(cmd_mq, cmd_buf, sizeof(cmd_buf), &priority);
         write(fd, cmd_buf, write_size);
 
         if (poll(pfds, 1, 20) < 1)
@@ -66,14 +68,12 @@ int main()
 
         reply_size = read(fd, &reply_buf, sizeof(reply_buf));
 
-        if (priority == 0)
-            mq_send(reply_ff, reply_buf, reply_size, priority);
-        else
-            mq_send(reply_ff, reply_size < 0 ? "\xee" : "\xff", 1, priority);
+        mq_send(priority == 0 ? reply_ioc : reply_ff, reply_buf, reply_size, priority);
     }
 
     //TODO: Close out elegantly
-    mq_close(cmd_ff);
+    mq_close(cmd_mq);
+    mq_close(reply_ioc);
     mq_close(reply_ff);
 
     return 0;
