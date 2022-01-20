@@ -21,29 +21,14 @@ Currently, when returning only a byte determining the status of the operation, t
 ### Performance details
 Benchmarked by sending 100k messages, using two CPUs on a Beaglebone AI. Single core performance is equiparable (with a very load-light core).
 
-#### Semi Write Only
-(Response is considered but not transmitted in full to sender, only the status)
+#### Read/Write
+(Response transmitted in full back to sender)
 
 |Run      |Time  |
 |---------|------|
-|1        |260 us|
-|2        |259 us|
-|3        |260 us|
-|4        |260 us|
+|1        |560 us|
+|2        |563 us|
+|3        |562 us|
+|4        |567 us|
 
-Average roundtrip time: 260 us
-
-#### Read/Write
-(Response transmitted in full back to sender. Any message with an invalid checksum is considered an error)
-
-|Run      |Time  |Comm. Errors|
-|---------|------|------------|
-|1        |544 us|0.06%       |
-|2        |574 us|0.12%       |
-|3        |570 us|0.10%       |
-|4        |581 us|0.08%       |
-
-Average roundtrip time: 567 us
-Average comm. error percentage: 0.09%
-
-Obs.: this is near (but not equal to) full speed. A single `printf` was added to every iteration to slightly throttle the program in order to increase stability.
+Average roundtrip time: 563 us
