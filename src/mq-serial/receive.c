@@ -3,9 +3,9 @@
 #include <termios.h>
 #include <unistd.h>
 #include <mqueue.h>
+#include <poll.h>
 
-#define BAUD B115200
-
+#define BAUD B3000000
 
 int main()
 {
@@ -13,14 +13,14 @@ int main()
 
     struct mq_attr attr;
 
-    attr.mq_maxmsg = 128;
+    attr.mq_maxmsg = 1000;
     attr.mq_msgsize = 32;
     attr.mq_flags = 0;
 
     mqd_t cmd_ff = mq_open("/cmd_ff", (O_RDWR | O_CREAT), 0666, &attr);
     mqd_t reply_ff = mq_open("/reply_ff", (O_RDWR | O_CREAT), 0666, &attr);
 
-    fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY); // TODO: Handle errors
+    fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY | O_NDELAY); // TODO: Handle errors
     struct termios tty;
     tcgetattr(fd, &tty);
 
@@ -35,7 +35,7 @@ int main()
     tty.c_iflag &= ~(IXON | IXOFF | IXANY);
     tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL);
 
-    tty.c_cc[VTIME] = 10;
+    tty.c_cc[VTIME] = 0;
     tty.c_cc[VMIN] = 0;
 
     cfsetispeed(&tty, BAUD);
@@ -49,11 +49,24 @@ int main()
 
     unsigned int priority;
 
-    for(;;) {
+    struct pollfd pfds[1];
+    pfds[0].fd = fd;
+    pfds[0].events = POLLIN;
+
+    for (;;)
+    {
         write_size = mq_receive(cmd_ff, cmd_buf, sizeof(cmd_buf), &priority);
         write(fd, cmd_buf, write_size);
+
+        if (poll(pfds, 1, 20) < 1)
+        {
+            mq_send(reply_ff, "\xee", 1, priority);
+            continue;
+        }
+
         reply_size = read(fd, &reply_buf, sizeof(reply_buf));
-        if(priority == 0)
+
+        if (priority == 0)
             mq_send(reply_ff, reply_buf, reply_size, priority);
         else
             mq_send(reply_ff, reply_size < 0 ? "\xee" : "\xff", 1, priority);
@@ -65,4 +78,3 @@ int main()
 
     return 0;
 }
-
