@@ -20,7 +20,10 @@
 #include <pru_intc.h>
 #include "resource_table_empty.h"
 
-
+extern uint64_t readBitsAsmCh0(uint32_t);
+extern uint64_t readBitsAsmCh1(uint32_t);
+extern uint64_t readBitsAsmCh2(uint32_t);
+extern uint64_t readBitsAsmCh3(uint32_t);
 
 volatile register uint32_t __R31;
 volatile register uint32_t __R30;
@@ -45,7 +48,8 @@ uint32_t readBits(uint8_t nBits, uint16_t samplingEdge);
 
 void main(){
    // General variables
-   uint8_t loop=0;
+   uint32_t loop=0;
+   uint64_t dataEncoder;
    uint8_t offsetCommand, offsetPosM, offsetPosL, offsetCRC, offsetMutex;
    uint8_t subsystemPRU, devPRU, unit;
 
@@ -76,13 +80,12 @@ void main(){
    }
 
 
-
-
    offsetCommand = (devPRU * 8) + 1;
    offsetPosL = (devPRU * 8) + 2;
    offsetPosM = (devPRU * 8) + 3;
    offsetCRC = (devPRU * 8) + 4;
    offsetMutex = (devPRU * 8) + 5;
+
 
    unit = ((subsystemPRU - 1)*2) + devPRU;
    shram[20] = tbit_c + (tbit_d << 8) + (unit << 16);
@@ -114,10 +117,10 @@ void main(){
 
    while(1){
 
-       // Start on a beginning of communication. Wait clock HIGH for, at least, 30 us
-       for(loop=1; loop!=100; loop++)
+       // Start on a beginning of communication. Wait clock HIGH for, at least, some usec
+       for(loop=1; loop!=200; loop++)
        {
-           if(((__R31 >> tbit_c) & 0x01) == 1)
+           if(((__R31 >> tbit_c) & 0x01) == 0)
            {
                // Reset loop counting
                loop = 1;
@@ -129,6 +132,8 @@ void main(){
        // Wait START OF TRANSMISSION - CLK |_
        while(((__R31 >> tbit_c) & 0x01) == 1)
        {
+           //shram[offsetPosL] = 0x77777777;
+           //shram[offsetPosM] = 0x7;
        }
 
        // ----------------------------------------
@@ -139,49 +144,70 @@ void main(){
        // Get Mode Command
        if(continue_allowed)
        {
-           shram[offsetCommand] = readBits(8, RISING_EDGE);
+           shram[offsetCommand] = 0;
+           dummyCycles(8, RISING_EDGE);
        }
 
        // ----------------------------------------
        // Wait START OF REPLY - DATA _|
-       for(loop=1; loop!=100; loop++)
+       for(loop=1; loop!=0; loop++)
        {
            if(((__R31 >> tbit_d) & 0x01) == 1)
            {
                break;
            }
-           continue_allowed = 0;
        }
+       if(loop == 0)
+              {
+                  continue_allowed = 0;
+              }
 
-       // Wait clock LOW
-       for(loop=1; loop!=100; loop++)
-       {
-           if(((__R31 >> tbit_c) & 0x01) == 0)
-           {
-               break;
-           }
-           continue_allowed = 0;
-       }
-       continue_allowed = 1;
 
        // Skip two clock cycles - Error Flags
-       dummyCycles(2, RISING_EDGE);
-
+       dummyCycles(1, RISING_EDGE);
 
        // ----------------------------------------
        // Get Data (position value) + CRC
        if(continue_allowed)
        {
            // Set mutex
+           //asm(" SET        r30.t1\n");
            shram[offsetMutex] = 0;
            // Acquire POSITION
-           shram[offsetPosL] = readBits(32, FALLING_EDGE);
-           shram[offsetPosM] = readBits(3, FALLING_EDGE);
-           // Acquire CRC
-           shram[offsetCRC] = readBits(5, FALLING_EDGE);
+           switch(unit)
+           {
+           case 0:
+               dataEncoder = readBitsAsmCh0(36);
+               break;
+           case 1:
+               dataEncoder = readBitsAsmCh1(36);
+               break;
+           case 2:
+               dataEncoder = readBitsAsmCh2(36);
+               break;
+           case 3:
+               dataEncoder = readBitsAsmCh3(36);
+               break;
+           }
+
+           //dataEncoder = readBitsAsmCh2(36);//, FALLING_EDGE);
+           // IGNORE CRC ------ Acquire CRC
+           //shram[offsetCRC] = readBits(5, FALLING_EDGE);
+
+           // Save position value into shram
+           shram[offsetPosL] = dataEncoder & 0xFFFFFFFF;
+           shram[offsetPosM] = dataEncoder >> 32;
            // Clear mutex
            shram[offsetMutex] = 1;
+           //asm(" CLR        r30.t1\n");
        }
+      /*else
+       {
+           shram[offsetMutex] = 0;
+           shram[offsetPosL] = 0x77777777;
+           shram[offsetPosM] = 0x7;
+           shram[offsetMutex] = 1;
+       }*/
        //__delay_cycles(100000000); // half-second delay
    }
 }
@@ -189,30 +215,27 @@ void main(){
 
 void dummyCycles(uint8_t nCycles, uint16_t samplingEdge)
 {
-    uint16_t wait;
+    uint32_t wait;
     for(; nCycles != 0; nCycles--)
            {
-               // Wait RISING EDGE
-               wait = 0;
-               while(((__R31 >> tbit_c) & 0x01) != samplingEdge)
+               // Wait EDGE
+            while(((__R31 >> tbit_c) & 0x01) != samplingEdge)
                {
-                   wait++;
-                   if(wait == 0)
+                   /*if(wait == 0)
                    {
                        continue_allowed = 0;
                        return;
-                   }
+                   }*/
                }
-               // Wait FALLING EDGE
-               wait = 0;
-               while(((__R31 >> tbit_c) & 0x01) == 1)
-               {
+               // Wait EDGE
+               while(((__R31 >> tbit_c) & 0x01) == samplingEdge)
+               {/*
                    wait++;
                    if(wait == 0)
                    {
                        continue_allowed = 0;
                        return;
-                   }
+                   }*/
                }
            }
     return;
@@ -220,15 +243,16 @@ void dummyCycles(uint8_t nCycles, uint16_t samplingEdge)
 
 uint32_t readBits(uint8_t nBits, uint16_t samplingEdge)
 {
-    uint16_t wait;
+    uint32_t wait;
     uint32_t data = 0;
     for(; nBits != 0; nBits--)
            {
                // Wait SAMPLING EDGE
-               wait = 0;
-               while(((__R31 >> tbit_c) & 0x01) != samplingEdge)
+               data = (data << 1);
+
+               //while(((__R31 >> tbit_c) & 0x01) != samplingEdge)
+               for(wait = 1; ((__R31 >> tbit_c) & 0x01) != samplingEdge; wait++)
                {
-                   wait++;
                    if(wait == 0)
                    {
                        continue_allowed = 0;
@@ -237,15 +261,14 @@ uint32_t readBits(uint8_t nBits, uint16_t samplingEdge)
                }
 
                // GET DATA INFO
-
-               data = (data << 1) + ((__R31 >> tbit_d) & 0x01);
+               data += ((__R31 >> tbit_d) & 0x01);
 
                // Wait complementary
-               wait = 0;
-               while(((__R31 >> tbit_c) & 0x01) == samplingEdge)
+
+               //while(((__R31 >> tbit_c) & 0x01) == samplingEdge)
+               for(wait = 1; (((__R31 >> tbit_c) & 0x01) == samplingEdge) && (wait != 0); wait++)
                {
-                   wait++;
-                   if(wait == 0)
+                  if(wait == 0)
                    {
                        continue_allowed = 0;
                        return 0;

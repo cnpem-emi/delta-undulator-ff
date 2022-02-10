@@ -1,0 +1,219 @@
+;
+; TESTING FOR REMOTEPROC - PRU - BB-AI
+;
+; r14: recebe e retorna variaveis (32 bits)
+; r15: auxiliar no retorno de variável de 64 bits
+
+	.global readBitsAsmCh0
+	.global readBitsAsmCh1
+	.global readBitsAsmCh2
+	.global readBitsAsmCh3
+
+; Retorno: (r14-r15 ----- LSB-MSB)
+; r14: valueUp
+; r15: valueDown
+; r16: timeout
+; r17: delay
+; r18: number of bits to be read
+
+
+
+; ---- CH 0
+readBitsAsmCh0:
+	MOV		r18, r14
+	LDI		r14, 0
+	LDI		r15, 0
+	LDI 	r16, 500
+	LDI 	r17, 10
+
+WAIT_CLK_UP_0:
+	SUB		r16, r16, 1
+	QBBS	WAIT_DATA_0, r31.b2, 1
+	QBNE	WAIT_CLK_UP_0, r16, 0
+	JMP		TIMEOUT_REACHED
+
+WAIT_DATA_0:
+	LDI 	r16, 500
+	CLR		r30.t1
+
+WAIT_CLK_DOWN_0:
+	SUB		r16, r16, 1
+	QBBC	GET_DATA_0, r31.b2, 1
+	QBNE	WAIT_CLK_DOWN_0, r16, 0
+	JMP		TIMEOUT_REACHED
+
+GET_DATA_0:
+	QBGT	LOWER_BITS_0, r18, 4
+	LSL		r14, r14, 1
+	QBBC	NEXT_CYCLE_0, r31.b0, 5
+	ADD		r14, r14, 1
+	SET		r30.t1
+	JMP 	NEXT_CYCLE_0
+
+LOWER_BITS_0:
+	LSL		r15, r15, 1
+	QBBC	NEXT_CYCLE_0, r31.b0, 5
+	ADD		r15, r15, 1
+
+NEXT_CYCLE_0:
+	SUB		r18, r18, 1
+	QBEQ	THE_END, r18, 0
+	LDI 	r16, 250
+	JMP		WAIT_CLK_UP_0
+
+
+
+
+
+
+; ---- CH 1
+readBitsAsmCh1:
+	MOV		r18, r14
+	LDI		r14, 0
+	LDI		r15, 0
+	LDI 	r16, 500
+	LDI 	r17, 10
+
+WAIT_CLK_UP_1:
+	SUB		r16, r16, 1
+	QBBS	WAIT_DATA_1, r31.b2, 2
+	QBNE	WAIT_CLK_UP_1, r16, 0
+	JMP		TIMEOUT_REACHED
+
+WAIT_DATA_1:
+	LDI 	r16, 500
+	CLR		r30.t1
+
+WAIT_CLK_DOWN_1:
+	SUB		r16, r16, 1
+	QBBC	GET_DATA_1, r31.b2, 2
+	QBNE	WAIT_CLK_DOWN_1, r16, 0
+	JMP		TIMEOUT_REACHED
+
+GET_DATA_1:
+	QBGT	LOWER_BITS_1, r18, 4
+	LSL		r14, r14, 1
+	QBBC	NEXT_CYCLE_1, r31.b1, 1
+	ADD		r14, r14, 1
+	SET		r30.t1
+	JMP 	NEXT_CYCLE_1
+
+LOWER_BITS_1:
+	LSL		r15, r15, 1
+	QBBC	NEXT_CYCLE_1, r31.b1, 1
+	ADD		r15, r15, 1
+
+NEXT_CYCLE_1:
+	SUB		r18, r18, 1
+	QBEQ	THE_END, r18, 0
+	LDI 	r16, 250
+	JMP		WAIT_CLK_UP_1
+
+
+
+
+
+
+; ---- CH 2
+readBitsAsmCh2:
+	MOV		r18, r14
+	LDI		r14, 0
+	LDI		r15, 0
+	LDI 	r16, 500
+	LDI 	r17, 10
+
+WAIT_CLK_UP_2:
+	SUB		r16, r16, 1
+	QBBS	WAIT_DATA_2, r31.b0, 4
+	QBNE	WAIT_CLK_UP_2, r16, 0
+	JMP		TIMEOUT_REACHED
+
+WAIT_DATA_2:
+	LDI 	r16, 500
+	CLR		r30.t1
+
+WAIT_CLK_DOWN_2:
+	SUB		r16, r16, 1
+	QBBC	GET_DATA_2, r31.b0, 4
+	QBNE	WAIT_CLK_DOWN_2, r16, 0
+	JMP		TIMEOUT_REACHED
+
+GET_DATA_2:
+	QBGT	LOWER_BITS_2, r18, 4
+	LSL		r14, r14, 1
+	QBBC	NEXT_CYCLE_2, r31.b0, 3
+	ADD		r14, r14, 1
+	SET		r30.t1
+	JMP 	NEXT_CYCLE_2
+
+LOWER_BITS_2:
+	LSL		r15, r15, 1
+	QBBC	NEXT_CYCLE_2, r31.b0, 3
+	ADD		r15, r15, 1
+
+NEXT_CYCLE_2:
+	SUB		r18, r18, 1
+	QBEQ	THE_END, r18, 0
+	LDI 	r16, 250
+	JMP		WAIT_CLK_UP_2
+
+
+; ---- CH 3
+readBitsAsmCh3:
+	MOV		r18, r14
+	LDI		r14, 0
+	LDI		r15, 0
+	LDI 	r16, 500
+	LDI 	r17, 10
+
+
+WAIT_CLK_UP_3:
+	SUB		r16, r16, 1
+	QBBS	WAIT_DATA_3, r31.b1, 2
+	QBNE	WAIT_CLK_UP_3, r16, 0
+	JMP		TIMEOUT_REACHED
+
+WAIT_DATA_3:
+	LDI 	r16, 500
+	CLR		r30.t1
+
+WAIT_CLK_DOWN_3:
+	SUB		r16, r16, 1
+	QBBC	GET_DATA_3, r31.b1, 2
+	QBNE	WAIT_CLK_DOWN_3, r16, 0
+	JMP		TIMEOUT_REACHED
+
+GET_DATA_3:
+	QBGT	LOWER_BITS_3, r18, 4
+	LSL		r14, r14, 1
+	QBBC	NEXT_CYCLE_3, r31.b1, 3
+	ADD		r14, r14, 1
+	SET		r30.t1
+	JMP 	NEXT_CYCLE_3
+
+LOWER_BITS_3:
+	LSL		r15, r15, 1
+	QBBC	NEXT_CYCLE_3, r31.b1, 3
+	ADD		r15, r15, 1
+
+NEXT_CYCLE_3:
+	SUB		r18, r18, 1
+	QBEQ	THE_END, r18, 0
+	LDI 	r16, 250
+	JMP		WAIT_CLK_UP_3
+
+
+
+; ---- COMMON TO ALL CHANNELS
+TIMEOUT_REACHED:
+	JMP 	THE_END
+    ;
+;    LDI		r15, 0x7
+;	LDI		r14, 0x7777
+;	LSL		r14, r14, 8
+;	ADD		r14, r14, 0x77
+;	LSL		r14, r14, 8
+;	ADD		r14, r14, 0x77
+
+THE_END:
+	JMP		r3.w2
