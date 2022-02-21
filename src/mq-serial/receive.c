@@ -59,7 +59,7 @@ int main()
         write_size = mq_receive(cmd_mq, cmd_buf, sizeof(cmd_buf), &priority);
         write(fd, cmd_buf, write_size);
 
-        if (poll(pfds, 1, 20) < 1)
+        if (poll(pfds, 1, 1) < 1)
         {
             mq_send(reply_ff, "\xee", 1, priority);
             continue;
