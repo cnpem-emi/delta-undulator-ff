@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <mqueue.h>
 #include <poll.h>
+#include <stdio.h>
 
 #define BAUD B3000000
 
@@ -22,6 +23,12 @@ int main()
     mqd_t reply_ff = mq_open("/reply_ff", (O_RDWR | O_CREAT), 0666, &attr);
 
     fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY | O_NDELAY); // TODO: Handle errors
+    if (fd == -1)
+    {
+        perror("No valid serial device connected");
+        return -1;
+    }
+
     struct termios tty;
     tcgetattr(fd, &tty);
 
