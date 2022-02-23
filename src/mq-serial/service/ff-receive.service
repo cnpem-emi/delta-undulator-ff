@@ -1,0 +1,16 @@
+[Unit]
+Description=Deals with messagequeue messages, passes them along to the PS
+
+Wants=netowrk.target
+After=syslog.target multi-user.target
+
+[Service]
+Type=simple
+ExecStartPre=echo 0 | sudo tee /sys/bus/usb-serial/devices/ttyUSB0/latency_timer
+ExecStart=/root/deltaUndulator-FF/src/mq-serial/receive
+Restart=on-failure
+RestartSec=10
+KillMode=control-group
+
+[Install]
+WantedBy=graphical.target
