@@ -1,9 +1,3 @@
-<<<<<<< HEAD
-#define _GNU_SOURCE
-
-=======
-#include <errno.h>
->>>>>>> parent of 3c74dd5 (Uses serial communication on the same file, scheduling)
 #include <fcntl.h>
 #include <mqueue.h>
 #include <pthread.h>
