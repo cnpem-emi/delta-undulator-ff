@@ -57,7 +57,9 @@ void *listenForCommands()
     if (poll(pfds, 1, 1) < 1)
     {
       mq_send(reply_ioc, "\xee", 1, priority);
-    } else {
+    }
+    else
+    {
       reply_size = read(fd, &reply_buf, sizeof(reply_buf));
       mq_send(reply_ioc, reply_buf, reply_size, priority);
     }
@@ -137,7 +139,7 @@ int main(void)
   pthread_t thisThread = pthread_self();
   pthread_t cmdThread;
 
-  //pthread_create(&cmdThread, NULL, listenForCommands, NULL);
+  // pthread_create(&cmdThread, NULL, listenForCommands, NULL);
   pthread_mutex_init(&serial_mutex, NULL);
 
   cpu_set_t *mainCpuSet;
@@ -146,16 +148,16 @@ int main(void)
   size_t cpuSetSize;
 
   CPU_ZERO_S(cpuSetSize, &mainCpuSet);
-  //CPU_ZERO_S(cpuSetSize, &cmdCpuSet);
+  CPU_ZERO_S(cpuSetSize, &cmdCpuSet);
 
   CPU_SET_S(1, cpuSetSize, mainCpuSet);
-  //CPU_SET_S(0, cpuSetSize, cmdCpuSet);
+  CPU_SET_S(0, cpuSetSize, cmdCpuSet);
 
   struct sched_param params;
   params.sched_priority = sched_get_priority_max(SCHED_FIFO);
   pthread_setschedparam(thisThread, SCHED_FIFO, &params);
   pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), mainCpuSet);
-  //pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), cmdCpuSet);
+  // pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), cmdCpuSet);
 
   gettimeofday(&tv1, NULL);
   // for (int i = 0; i < ITERACTIONS; i++)
@@ -172,16 +174,14 @@ int main(void)
 
     if (position[2] != oldpos)
     {
-      gettimeofday(&tv1, NULL);
       adjustVector(ajuste4setpoints, current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE]);
-      //pthread_mutex_lock(&serial_mutex);             
+      // pthread_mutex_lock(&serial_mutex);
       write(fd, ajuste4setpoints, 22);
-      //pthread_mutex_unlock(&serial_mutex);
+      // pthread_mutex_unlock(&serial_mutex);
       oldpos = position[2];
-      gettimeofday(&tv2, NULL);
     }
   }
   gettimeofday(&tv2, NULL);
@@ -237,8 +237,7 @@ void adjustVector(uint8_t *data_vector, float current1, float current2,
   int i;
   // CURRENT 1
   for (i = 0; i < 4; i++)
-  {undefined reference to `mq_open'
-
+  {
     data_vector[5 + i] = (uint32_t)(*(uint32_t *)&current1) >> (i * 8);
   }
   // CURRENT 2
