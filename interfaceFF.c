@@ -137,7 +137,7 @@ int main(void)
   pthread_t thisThread = pthread_self();
   pthread_t cmdThread;
 
-  pthread_create(&cmdThread, NULL, listenForCommands, NULL);
+  //pthread_create(&cmdThread, NULL, listenForCommands, NULL);
   pthread_mutex_init(&serial_mutex, NULL);
 
   cpu_set_t *mainCpuSet;
@@ -146,16 +146,16 @@ int main(void)
   size_t cpuSetSize;
 
   CPU_ZERO_S(cpuSetSize, &mainCpuSet);
-  CPU_ZERO_S(cpuSetSize, &cmdCpuSet);
+  //CPU_ZERO_S(cpuSetSize, &cmdCpuSet);
 
   CPU_SET_S(1, cpuSetSize, mainCpuSet);
-  CPU_SET_S(0, cpuSetSize, cmdCpuSet);
+  //CPU_SET_S(0, cpuSetSize, cmdCpuSet);
 
   struct sched_param params;
-  params.sched_priority = sched_get_priority_max(SCHED_FIFO)/2;
+  params.sched_priority = sched_get_priority_max(SCHED_FIFO);
   pthread_setschedparam(thisThread, SCHED_FIFO, &params);
   pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), mainCpuSet);
-  pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), cmdCpuSet);
+  //pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), cmdCpuSet);
 
   gettimeofday(&tv1, NULL);
   // for (int i = 0; i < ITERACTIONS; i++)
@@ -177,9 +177,9 @@ int main(void)
                    current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE]);
-      pthread_mutex_lock(&serial_mutex);             
+      //pthread_mutex_lock(&serial_mutex);             
       write(fd, ajuste4setpoints, 22);
-      pthread_mutex_unlock(&serial_mutex);
+      //pthread_mutex_unlock(&serial_mutex);
       oldpos = position[2];
       gettimeofday(&tv2, NULL);
     }
