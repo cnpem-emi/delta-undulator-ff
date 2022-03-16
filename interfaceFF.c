@@ -16,7 +16,7 @@
 #define PRU2_ADDR 0x4b280000
 #define SHRAM_OFFSET 0x00010000
 #define BUFFER_SIZE 40000
-#define ITERACTIONS 10000
+#define ITERATIONS 10000
 #define BAUD B3000000
 
 // Auxiliar functions
@@ -123,7 +123,6 @@ int main(void)
     current_up[i] = i * 0.0001;
   }
 
-  struct timeval tv1, tv2;
   char reply_buf[32];
 
   position[0] = reverseBits((uint32_t)prudata1[2]) +
@@ -139,7 +138,7 @@ int main(void)
   pthread_t thisThread = pthread_self();
   pthread_t cmdThread;
 
-  // pthread_create(&cmdThread, NULL, listenForCommands, NULL);
+  pthread_create(&cmdThread, NULL, listenForCommands, NULL);
   pthread_mutex_init(&serial_mutex, NULL);
 
   cpu_set_t *mainCpuSet;
@@ -154,13 +153,20 @@ int main(void)
   CPU_SET_S(0, cpuSetSize, cmdCpuSet);
 
   struct sched_param params;
-  params.sched_priority = sched_get_priority_max(SCHED_FIFO);
-  pthread_setschedparam(thisThread, SCHED_FIFO, &params);
-  pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), mainCpuSet);
-  // pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), cmdCpuSet);
+  params.sched_priority = sched_get_priority_max(SCHED_RR);
 
-  gettimeofday(&tv1, NULL);
-  // for (int i = 0; i < ITERACTIONS; i++)
+  pthread_setschedparam(thisThread, SCHED_FIFO, &params);
+  pthread_setschedparam(cmdThread, SCHED_FIFO, &params);
+
+  pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), mainCpuSet);
+  pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), cmdCpuSet);
+
+  FILE *fp;
+  fp = fopen("out.csv", "w");
+
+  // struct timespec start, stop;
+
+  // for (int i = 0; i < ITERATIONS; i++)
   while (1)
   {
     position[0] = reverseBits((uint32_t)prudata1[2]) +
@@ -172,19 +178,21 @@ int main(void)
     position[3] = reverseBits((uint32_t)prudata2[10]) +
                   (reverseBits8((uint8_t)prudata2[11] & 0xFF) << 29);
 
+    // clock_gettime(CLOCK_MONOTONIC, &start);
     if (position[2] != oldpos)
     {
       adjustVector(ajuste4setpoints, current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE]);
-      // pthread_mutex_lock(&serial_mutex);
+      pthread_mutex_lock(&serial_mutex);
       write(fd, ajuste4setpoints, 22);
-      // pthread_mutex_unlock(&serial_mutex);
+      pthread_mutex_unlock(&serial_mutex);
       oldpos = position[2];
     }
   }
-  gettimeofday(&tv2, NULL);
+  /*clock_gettime(CLOCK_MONOTONIC, &stop);
+  fprintf(fp, "%li\n", (stop.tv_nsec - start.tv_nsec));
   printf("Total time = %f millisecs\n",
          1000 * ((double)(tv2.tv_usec - tv1.tv_usec) / 1000000 +
                  (double)(tv2.tv_sec - tv1.tv_sec)));
@@ -192,7 +200,7 @@ int main(void)
          1000 * 1000 *
              ((double)(tv2.tv_usec - tv1.tv_usec) / 1000000 +
               (double)(tv2.tv_sec - tv1.tv_sec)) /
-             ITERACTIONS);
+             ITERATIONS);*/
 
   return 0;
 }
