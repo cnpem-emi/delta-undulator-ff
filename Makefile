@@ -16,4 +16,4 @@ $(OUT):
 	mkdir -p $(OUT)
 
 %: %.c
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $< -o $@ $(CFLAGS)
