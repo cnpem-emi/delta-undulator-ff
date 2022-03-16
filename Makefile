@@ -1,5 +1,5 @@
 SHELL = /bin/sh
-CFLAGS := -O3 -march=native -Wall -lpthread -lrt
+CFLAGS := -O3 -march=native -Wall -pthread -lrt
 CC := gcc
 
 COMPILE.c = $(CC) $(CFLAGS)
@@ -16,4 +16,4 @@ $(OUT):
 	mkdir -p $(OUT)
 
 %: %.c
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $< -o $@ $(CFLAGS)
