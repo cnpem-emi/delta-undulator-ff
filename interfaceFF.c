@@ -19,10 +19,20 @@
 #define ITERATIONS 10000
 #define BAUD B3000000
 
+typedef union {
+    struct __attribute__((__packed__)) msg {
+        uint8_t config[5];
+        float currents[4];
+        uint8_t checksum;
+    } msg;
+
+    uint8_t data_vector[22];
+} adjust_t;
+
 // Auxiliar functions
 uint32_t reverseBits(uint32_t num);
 uint8_t reverseBits8(uint8_t num);
-void adjustVector(uint8_t *data_vector, float current1, float current2,
+void adjustVector(adjust_t *data_vector, float current1, float current2,
                   float current3, float current4);
 
 int fd;
@@ -106,9 +116,7 @@ int main(void)
   uint64_t position[] = {0, 0, 0, 0};
   uint64_t oldpos = 0;
 
-  uint8_t ajuste4setpoints[22] = {
-      0x01, 0x50, 0x00, 0x11, 0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8d};
+  adjust_t setpoints = {.msg.config = {0x01, 0x50, 0x00, 0x11, 0x11}, .msg.checksum = 0x8d};
 
   volatile ulong *prudata1 =
       (ulong *)mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fdm,
@@ -122,8 +130,6 @@ int main(void)
   {
     current_up[i] = i * 0.0001;
   }
-
-  char reply_buf[32];
 
   position[0] = reverseBits((uint32_t)prudata1[2]) +
                 (reverseBits8((uint8_t)prudata1[3] & 0xFF) << 29);
@@ -153,7 +159,7 @@ int main(void)
   CPU_SET_S(0, cpuSetSize, cmdCpuSet);
 
   struct sched_param params;
-  params.sched_priority = sched_get_priority_max(SCHED_RR);
+  params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 
   pthread_setschedparam(thisThread, SCHED_FIFO, &params);
   pthread_setschedparam(cmdThread, SCHED_FIFO, &params);
@@ -161,12 +167,6 @@ int main(void)
   pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), mainCpuSet);
   pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), cmdCpuSet);
 
-  FILE *fp;
-  fp = fopen("out.csv", "w");
-
-  // struct timespec start, stop;
-
-  // for (int i = 0; i < ITERATIONS; i++)
   while (1)
   {
     position[0] = reverseBits((uint32_t)prudata1[2]) +
@@ -178,29 +178,18 @@ int main(void)
     position[3] = reverseBits((uint32_t)prudata2[10]) +
                   (reverseBits8((uint8_t)prudata2[11] & 0xFF) << 29);
 
-    // clock_gettime(CLOCK_MONOTONIC, &start);
     if (position[2] != oldpos)
     {
-      adjustVector(ajuste4setpoints, current_up[position[2] % BUFFER_SIZE],
+      adjustVector(&setpoints, current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE]);
       pthread_mutex_lock(&serial_mutex);
-      write(fd, ajuste4setpoints, 22);
+      write(fd, setpoints.data_vector, 22);
       pthread_mutex_unlock(&serial_mutex);
       oldpos = position[2];
     }
   }
-  /*clock_gettime(CLOCK_MONOTONIC, &stop);
-  fprintf(fp, "%li\n", (stop.tv_nsec - start.tv_nsec));
-  printf("Total time = %f millisecs\n",
-         1000 * ((double)(tv2.tv_usec - tv1.tv_usec) / 1000000 +
-                 (double)(tv2.tv_sec - tv1.tv_sec)));
-  printf("Round time = %f microsecs\n",
-         1000 * 1000 *
-             ((double)(tv2.tv_usec - tv1.tv_usec) / 1000000 +
-              (double)(tv2.tv_sec - tv1.tv_sec)) /
-             ITERATIONS);*/
 
   return 0;
 }
@@ -239,34 +228,13 @@ uint8_t reverseBits8(uint8_t num)
   return reverse_num;
 }
 
-void adjustVector(uint8_t *data_vector, float current1, float current2,
+void adjustVector(adjust_t *setpoints, float current1, float current2,
                   float current3, float current4)
 {
-  int i;
-  // CURRENT 1
-  for (i = 0; i < 4; i++)
-  {
-    data_vector[5 + i] = (uint32_t)(*(uint32_t *)&current1) >> (i * 8);
-  }
-  // CURRENT 2
-  for (i = 0; i < 4; i++)
-  {
-    data_vector[9 + i] = (uint32_t)(*(uint32_t *)&current1) >> (i * 8);
-  }
-  // CURRENT 3
-  for (i = 0; i < 4; i++)
-  {
-    data_vector[13 + i] = (uint32_t)(*(uint32_t *)&current1) >> (i * 8);
-  }
-  // CURRENT 4FeedForward
-  for (i = 0; i < 4; i++)
-  {
-    data_vector[17 + i] = (uint32_t)(*(uint32_t *)&current1) >> (i * 8);
-  }
+  memcpy(setpoints->msg.currents, (const char[]){current1, current2, current3, current4}, 4);
+
   // CHECKSUM
-  data_vector[21] = 0;
-  for (i = 0; i < 21; i++)
-  {
-    data_vector[21] -= data_vector[i];
-  }
+  setpoints->msg.checksum = 0;
+  for (int i = 0; i < 21; i++)
+    setpoints->msg.checksum  -= setpoints->data_vector[i];
 }
