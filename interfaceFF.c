@@ -187,10 +187,8 @@ int main(void)
   pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), &mainCpuSet);
   pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), &cmdCpuSet);
 
-  struct timespec start, stop;
   for(int i = 0; i < 100000; i++)
   {
-    write(fd, "\xff\x00", 2);
     position[0] = reverseBits((uint32_t)prudata1[2]) +
                   (reverseBits8((uint8_t)prudata1[3] & 0xFF) << 29);
     position[1] = reverseBits((uint32_t)prudata1[10]) +
