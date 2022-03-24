@@ -16,6 +16,8 @@
 #define ITERATIONS 10000
 #define BAUD B3000000
 
+// Since we've only got 5 header (config) bytes, packing is necessary.
+
 typedef union {
     struct __attribute__((__packed__)) msg {
         uint8_t config[5];
@@ -187,7 +189,7 @@ int main(void)
   pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), &mainCpuSet);
   pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), &cmdCpuSet);
 
-  for(int i = 0; i < 100000; i++)
+  for(;;)
   {
     position[0] = reverseBits((uint32_t)prudata1[2]) +
                   (reverseBits8((uint8_t)prudata1[3] & 0xFF) << 29);
@@ -214,38 +216,31 @@ int main(void)
   return 0;
 }
 
+/* Bit reversal functions use a divide and conquer algorithm
+* Bytes are split in two halves, then pairs are swapped 
+* until we're left with a complete reversal.
+* 
+* See https://archive.org/details/1983-04-dr-dobbs-journal/page/24/mode/2up
+*/
+
 uint32_t reverseBits(uint32_t num)
 {
-  unsigned int count = sizeof(num) * 8 - 1;
-  uint32_t reverse_num = num;
-
-  num >>= 1;
-  while (num)
-  {
-    reverse_num <<= 1;
-    reverse_num |= num & 1;
-    num >>= 1;
-    count--;
-  }
-  reverse_num <<= count;
-  return reverse_num;
+  num = (num & 0xffff0000) >> 16  | (num & 0x0000ffff) << 16; 
+  num = (num & 0xff00ff00) >> 8  | (num & 0x00ff00ff) << 8;
+  num = (num & 0xf0f0f0f0) >> 4  | (num & 0x0f0f0f0f) << 4;
+  num = (num & 0xcccccccc) >> 2 | (num & 0x33333333) << 2;
+  num = (num & 0xaaaaaaaa) >> 1 | (num & 0x55555555) << 1 ;
+  
+  return num;
 }
 
 uint8_t reverseBits8(uint8_t num)
 {
-  unsigned int count = sizeof(num) * 8 - 1;
-  uint8_t reverse_num = num;
+  num = (num & 0xf0) >> 4 | (num & 0x0f) << 4;
+  num = (num & 0xcc) >> 2 | (num & 0x33) << 2;
+  num = (num & 0xaa) >> 1 | (num & 0x55) << 1;
 
-  num >>= 1;
-  while (num)
-  {
-    reverse_num <<= 1;
-    reverse_num |= num & 1;
-    num >>= 1;
-    count--;
-  }
-  reverse_num <<= count;
-  return reverse_num;
+  return num;
 }
 
 void adjustVector(adjust_t *setpoints, float current1, float current2,
