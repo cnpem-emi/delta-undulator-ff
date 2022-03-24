@@ -1,5 +1,5 @@
 SHELL = /bin/sh
-CFLAGS := -O3 -march=native -Wall -pthread -lrt
+CFLAGS := -O3 -march=native -Wall -pthread -lrt -lhiredis -levent
 CC := gcc
 
 COMPILE.c = $(CC) $(CFLAGS)

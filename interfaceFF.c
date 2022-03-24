@@ -1,16 +1,13 @@
 #define _GNU_SOURCE
 
-#include <fcntl.h>
 #include <pthread.h>
-#include <stdint.h>
-#include <stdio.h>
 #include <sys/mman.h>
-#include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
 #include <poll.h>
 #include <mqueue.h>
-#include <sched.h>
+#include <hiredis/adapters/libevent.h>
+#include <string.h>
 
 #define PRU1_ADDR 0x4b200000
 #define PRU2_ADDR 0x4b280000
@@ -37,10 +34,35 @@ void adjustVector(adjust_t *data_vector, float current1, float current2,
 
 int fd;
 pthread_mutex_t serial_mutex;
+redisContext *sync_c;
+
+void onTableChange(redisAsyncContext *c, void *reply, void *privdata) {
+    redisReply *r = reply;
+    if (reply == NULL) return;
+
+    if (r->type == REDIS_REPLY_ARRAY) {
+        r = redisCommand(sync_c, "LRANGE ArrayTest 0 -1");
+        if (r == NULL) return;
+        /*if (r->type == REDIS_REPLY_ARRAY) {
+        }*/
+        freeReplyObject(r);
+    }
+}
 
 void *listenForCommands()
 {
   struct mq_attr attr;
+  struct event_base *base = event_base_new();
+
+  redisAsyncContext *c = redisAsyncConnect("10.1.4.157", 6379);
+  sync_c = redisConnect("10.1.4.157", 6379);
+  if (!sync_c->err && !c->err) {
+    redisLibeventAttach(c, base);
+    redisAsyncCommand(c, onTableChange, NULL, "SUBSCRIBE epics");
+    event_base_dispatch(base);
+  } else {
+    printf("Redis server not available!\n");
+  }
 
   attr.mq_maxmsg = 1000;
   attr.mq_msgsize = 32;
@@ -147,28 +169,28 @@ int main(void)
   pthread_create(&cmdThread, NULL, listenForCommands, NULL);
   pthread_mutex_init(&serial_mutex, NULL);
 
-  cpu_set_t *mainCpuSet;
-  cpu_set_t *cmdCpuSet;
+  cpu_set_t mainCpuSet;
+  cpu_set_t cmdCpuSet;
 
-  size_t cpuSetSize;
+  CPU_ZERO(&mainCpuSet);
+  CPU_ZERO(&cmdCpuSet);
 
-  CPU_ZERO_S(cpuSetSize, &mainCpuSet);
-  CPU_ZERO_S(cpuSetSize, &cmdCpuSet);
-
-  CPU_SET_S(1, cpuSetSize, mainCpuSet);
-  CPU_SET_S(0, cpuSetSize, cmdCpuSet);
+  CPU_SET(1, &mainCpuSet);
+  CPU_SET(0, &cmdCpuSet);
 
   struct sched_param params;
   params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 
   pthread_setschedparam(thisThread, SCHED_FIFO, &params);
-  pthread_setschedparam(cmdThread, SCHED_FIFO, &params);
+  //pthread_setschedparam(cmdThread, SCHED_FIFO, &params);
 
-  pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), mainCpuSet);
-  pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), cmdCpuSet);
+  pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), &mainCpuSet);
+  pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), &cmdCpuSet);
 
-  while (1)
+  struct timespec start, stop;
+  for(int i = 0; i < 100000; i++)
   {
+    write(fd, "\xff\x00", 2);
     position[0] = reverseBits((uint32_t)prudata1[2]) +
                   (reverseBits8((uint8_t)prudata1[3] & 0xFF) << 29);
     position[1] = reverseBits((uint32_t)prudata1[10]) +
@@ -190,7 +212,7 @@ int main(void)
       oldpos = position[2];
     }
   }
-
+  
   return 0;
 }
 
@@ -238,3 +260,4 @@ void adjustVector(adjust_t *setpoints, float current1, float current2,
   for (int i = 0; i < 21; i++)
     setpoints->msg.checksum  -= setpoints->data_vector[i];
 }
+
