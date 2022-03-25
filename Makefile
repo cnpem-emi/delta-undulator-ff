@@ -15,5 +15,13 @@ directories: $(OUT)
 $(OUT):
 	mkdir -p $(OUT)
 
+redis:
+	git clone https://github.com/redis/hiredis.git
+	cd ./hiredis; make && make install
+	grep -qxF 'include /usr/local/lib' /etc/ld.so.conf || \
+	echo 'include /usr/local/lib' >> /etc/ld.so.conf
+	ldconfig
+	rm -rf hiredis
+
 %: %.c
 	$(CC) $< -o $@ $(CFLAGS)
