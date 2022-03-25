@@ -1,16 +1,13 @@
 #define _GNU_SOURCE
 
-#include <fcntl.h>
 #include <pthread.h>
-#include <stdint.h>
-#include <stdio.h>
 #include <sys/mman.h>
-#include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
 #include <poll.h>
 #include <mqueue.h>
-#include <sched.h>
+#include <hiredis/adapters/libevent.h>
+#include <string.h>
 
 #define PRU1_ADDR 0x4b200000
 #define PRU2_ADDR 0x4b280000
@@ -18,6 +15,8 @@
 #define BUFFER_SIZE 40000
 #define ITERATIONS 10000
 #define BAUD B3000000
+
+// Since we've only got 5 header (config) bytes, packing is necessary.
 
 typedef union {
     struct __attribute__((__packed__)) msg {
@@ -37,10 +36,35 @@ void adjustVector(adjust_t *data_vector, float current1, float current2,
 
 int fd;
 pthread_mutex_t serial_mutex;
+redisContext *sync_c;
+
+void onTableChange(redisAsyncContext *c, void *reply, void *privdata) {
+    redisReply *r = reply;
+    if (reply == NULL) return;
+
+    if (r->type == REDIS_REPLY_ARRAY) {
+        r = redisCommand(sync_c, "LRANGE ArrayTest 0 -1");
+        if (r == NULL) return;
+        /*if (r->type == REDIS_REPLY_ARRAY) {
+        }*/
+        freeReplyObject(r);
+    }
+}
 
 void *listenForCommands()
 {
   struct mq_attr attr;
+  struct event_base *base = event_base_new();
+
+  redisAsyncContext *c = redisAsyncConnect("10.1.4.157", 6379);
+  sync_c = redisConnect("10.1.4.157", 6379);
+  if (!sync_c->err && !c->err) {
+    redisLibeventAttach(c, base);
+    redisAsyncCommand(c, onTableChange, NULL, "SUBSCRIBE epics");
+    event_base_dispatch(base);
+  } else {
+    printf("Redis server not available!\n");
+  }
 
   attr.mq_maxmsg = 1000;
   attr.mq_msgsize = 32;
@@ -147,27 +171,25 @@ int main(void)
   pthread_create(&cmdThread, NULL, listenForCommands, NULL);
   pthread_mutex_init(&serial_mutex, NULL);
 
-  cpu_set_t *mainCpuSet;
-  cpu_set_t *cmdCpuSet;
+  cpu_set_t mainCpuSet;
+  cpu_set_t cmdCpuSet;
 
-  size_t cpuSetSize;
+  CPU_ZERO(&mainCpuSet);
+  CPU_ZERO(&cmdCpuSet);
 
-  CPU_ZERO_S(cpuSetSize, &mainCpuSet);
-  CPU_ZERO_S(cpuSetSize, &cmdCpuSet);
-
-  CPU_SET_S(1, cpuSetSize, mainCpuSet);
-  CPU_SET_S(0, cpuSetSize, cmdCpuSet);
+  CPU_SET(1, &mainCpuSet);
+  CPU_SET(0, &cmdCpuSet);
 
   struct sched_param params;
   params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 
   pthread_setschedparam(thisThread, SCHED_FIFO, &params);
-  pthread_setschedparam(cmdThread, SCHED_FIFO, &params);
+  //pthread_setschedparam(cmdThread, SCHED_FIFO, &params);
 
-  pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), mainCpuSet);
-  pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), cmdCpuSet);
+  pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), &mainCpuSet);
+  pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), &cmdCpuSet);
 
-  while (1)
+  for(;;)
   {
     position[0] = reverseBits((uint32_t)prudata1[2]) +
                   (reverseBits8((uint8_t)prudata1[3] & 0xFF) << 29);
@@ -190,42 +212,35 @@ int main(void)
       oldpos = position[2];
     }
   }
-
+  
   return 0;
 }
 
+/* Bit reversal functions use a divide and conquer algorithm
+* Bytes are split in two halves, then pairs are swapped 
+* until we're left with a complete reversal.
+* 
+* See https://archive.org/details/1983-04-dr-dobbs-journal/page/24/mode/2up
+*/
+
 uint32_t reverseBits(uint32_t num)
 {
-  unsigned int count = sizeof(num) * 8 - 1;
-  uint32_t reverse_num = num;
-
-  num >>= 1;
-  while (num)
-  {
-    reverse_num <<= 1;
-    reverse_num |= num & 1;
-    num >>= 1;
-    count--;
-  }
-  reverse_num <<= count;
-  return reverse_num;
+  num = (num & 0xffff0000) >> 16  | (num & 0x0000ffff) << 16; 
+  num = (num & 0xff00ff00) >> 8  | (num & 0x00ff00ff) << 8;
+  num = (num & 0xf0f0f0f0) >> 4  | (num & 0x0f0f0f0f) << 4;
+  num = (num & 0xcccccccc) >> 2 | (num & 0x33333333) << 2;
+  num = (num & 0xaaaaaaaa) >> 1 | (num & 0x55555555) << 1 ;
+  
+  return num;
 }
 
 uint8_t reverseBits8(uint8_t num)
 {
-  unsigned int count = sizeof(num) * 8 - 1;
-  uint8_t reverse_num = num;
+  num = (num & 0xf0) >> 4 | (num & 0x0f) << 4;
+  num = (num & 0xcc) >> 2 | (num & 0x33) << 2;
+  num = (num & 0xaa) >> 1 | (num & 0x55) << 1;
 
-  num >>= 1;
-  while (num)
-  {
-    reverse_num <<= 1;
-    reverse_num |= num & 1;
-    num >>= 1;
-    count--;
-  }
-  reverse_num <<= count;
-  return reverse_num;
+  return num;
 }
 
 void adjustVector(adjust_t *setpoints, float current1, float current2,
@@ -238,3 +253,4 @@ void adjustVector(adjust_t *setpoints, float current1, float current2,
   for (int i = 0; i < 21; i++)
     setpoints->msg.checksum  -= setpoints->data_vector[i];
 }
+
