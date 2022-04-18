@@ -15,17 +15,21 @@
 #define BUFFER_SIZE 40000
 #define ITERATIONS 10000
 #define BAUD B3000000
+#define REDIS_SERVER "10.0.6.70"
+
+char *tableEntry[4] = {"Array:Test-Mon", "Array2:Test-Mon", "Array3:Test-Mon", "Array4:Test-Mon"};
 
 // Since we've only got 5 header (config) bytes, packing is necessary.
+typedef union
+{
+  struct __attribute__((__packed__)) msg
+  {
+    uint8_t config[5];
+    float currents[4];
+    uint8_t checksum;
+  } msg;
 
-typedef union {
-    struct __attribute__((__packed__)) msg {
-        uint8_t config[5];
-        float currents[4];
-        uint8_t checksum;
-    } msg;
-
-    uint8_t data_vector[22];
+  uint8_t data_vector[22];
 } adjust_t;
 
 // Auxiliar functions
@@ -38,17 +42,40 @@ int fd;
 pthread_mutex_t serial_mutex;
 redisContext *sync_c;
 
-void onTableChange(redisAsyncContext *c, void *reply, void *privdata) {
-    redisReply *r = reply;
-    if (reply == NULL) return;
+void onTableChange(redisAsyncContext *c, void *reply, void *privdata)
+{
+  redisReply *r = reply;
+  if (reply == NULL)
+    return;
 
-    if (r->type == REDIS_REPLY_ARRAY) {
-        r = redisCommand(sync_c, "LRANGE ArrayTest 0 -1");
-        if (r == NULL) return;
+  if (r->type == REDIS_REPLY_ARRAY)
+  {
+    if (r->element[2]->str == NULL)
+    {
+      for (int i = 0; i < sizeof(tableEntry) / sizeof(tableEntry[0]); i++)
+      {
+        r = redisCommand(sync_c, "LRANGE %s 0 -1", tableEntry[i]);
         /*if (r->type == REDIS_REPLY_ARRAY) {
         }*/
         freeReplyObject(r);
+      }
     }
+    else
+    {
+      for (int i = 0; i < sizeof(tableEntry) / sizeof(tableEntry[0]); i++)
+      {
+        if (strcmp(tableEntry[i], r->element[2]->str) == 0)
+        {
+          r = redisCommand(sync_c, "LRANGE %s 0 -1", tableEntry[i]);
+          /*if (r->type == REDIS_REPLY_ARRAY) {
+            UPDATE MAP HERE
+          }*/
+          freeReplyObject(r);
+        }
+      }
+    }
+    return;
+  }
 }
 
 void *listenForCommands()
@@ -56,13 +83,16 @@ void *listenForCommands()
   struct mq_attr attr;
   struct event_base *base = event_base_new();
 
-  redisAsyncContext *c = redisAsyncConnect("10.1.4.157", 6379);
-  sync_c = redisConnect("10.1.4.157", 6379);
-  if (!sync_c->err && !c->err) {
+  redisAsyncContext *c = redisAsyncConnect(REDIS_SERVER, 6379);
+  sync_c = redisConnect(REDIS_SERVER, 6379);
+  if (!sync_c->err && !c->err)
+  {
     redisLibeventAttach(c, base);
-    redisAsyncCommand(c, onTableChange, NULL, "SUBSCRIBE epics");
+    redisAsyncCommand(c, onTableChange, NULL, "SUBSCRIBE ArraySubscription");
     event_base_dispatch(base);
-  } else {
+  }
+  else
+  {
     printf("Redis server not available!\n");
   }
 
@@ -187,12 +217,12 @@ int main(void)
   params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 
   pthread_setschedparam(thisThread, SCHED_FIFO, &params);
-  //pthread_setschedparam(cmdThread, SCHED_FIFO, &params);
+  // pthread_setschedparam(cmdThread, SCHED_FIFO, &params);
 
   pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), &mainCpuSet);
   pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), &cmdCpuSet);
 
-  for(;;)
+  for (;;)
   {
     position[0] = reverseBits((uint32_t)prudata1[2]) +
                   (reverseBits8((uint8_t)prudata1[3] & 0xFF) << 29);
@@ -215,25 +245,25 @@ int main(void)
       oldpos = position[2];
     }
   }
-  
+
   return 0;
 }
 
 /* Bit reversal functions use a divide and conquer algorithm
-* Bytes are split in two halves, then pairs are swapped 
-* until we're left with a complete reversal.
-* 
-* See https://archive.org/details/1983-04-dr-dobbs-journal/page/24/mode/2up
-*/
+ * Bytes are split in two halves, then pairs are swapped
+ * until we're left with a complete reversal.
+ *
+ * See https://archive.org/details/1983-04-dr-dobbs-journal/page/24/mode/2up
+ */
 
 uint32_t reverseBits(uint32_t num)
 {
-  num = (num & 0xffff0000) >> 16  | (num & 0x0000ffff) << 16; 
-  num = (num & 0xff00ff00) >> 8  | (num & 0x00ff00ff) << 8;
-  num = (num & 0xf0f0f0f0) >> 4  | (num & 0x0f0f0f0f) << 4;
+  num = (num & 0xffff0000) >> 16 | (num & 0x0000ffff) << 16;
+  num = (num & 0xff00ff00) >> 8 | (num & 0x00ff00ff) << 8;
+  num = (num & 0xf0f0f0f0) >> 4 | (num & 0x0f0f0f0f) << 4;
   num = (num & 0xcccccccc) >> 2 | (num & 0x33333333) << 2;
-  num = (num & 0xaaaaaaaa) >> 1 | (num & 0x55555555) << 1 ;
-  
+  num = (num & 0xaaaaaaaa) >> 1 | (num & 0x55555555) << 1;
+
   return num;
 }
 
@@ -254,6 +284,5 @@ void adjustVector(adjust_t *setpoints, float current1, float current2,
   // CHECKSUM
   setpoints->msg.checksum = 0;
   for (int i = 0; i < 21; i++)
-    setpoints->msg.checksum  -= setpoints->data_vector[i];
+    setpoints->msg.checksum -= setpoints->data_vector[i];
 }
-
