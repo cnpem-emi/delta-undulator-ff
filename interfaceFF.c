@@ -54,7 +54,7 @@ void onTableChange(redisAsyncContext *c, void *reply, void *privdata)
     {
       for (int i = 0; i < sizeof(tableEntry) / sizeof(tableEntry[0]); i++)
       {
-        r = redisCommand(sync_c, "LRANGE %s 0 -1", tableEntry[i]);
+        redisReply *r = redisCommand(sync_c, "LRANGE %s 0 -1", tableEntry[i]);
         /*if (r->type == REDIS_REPLY_ARRAY) {
         }*/
         freeReplyObject(r);
@@ -66,7 +66,7 @@ void onTableChange(redisAsyncContext *c, void *reply, void *privdata)
       {
         if (strcmp(tableEntry[i], r->element[2]->str) == 0)
         {
-          r = redisCommand(sync_c, "LRANGE %s 0 -1", tableEntry[i]);
+          redisReply *r = redisCommand(sync_c, "LRANGE %s 0 -1", tableEntry[i]);
           /*if (r->type == REDIS_REPLY_ARRAY) {
             UPDATE MAP HERE
           }*/
