@@ -16,8 +16,9 @@
 #define ITERATIONS 10000
 #define BAUD B3000000
 #define REDIS_SERVER "10.0.6.70"
+#define TABLE_SIZE 2000
 
-char *tableEntry[4] = {"Array:Test-Mon", "Array2:Test-Mon", "Array3:Test-Mon", "Array4:Test-Mon"};
+char *tableEntry[5] = {"Array:Test-Mon", "Array2:Test-Mon", "Array3:Test-Mon", "Array4:Test-Mon", "Array5:Test-Mon"};
 
 // Since we've only got 5 header (config) bytes, packing is necessary.
 typedef union
@@ -50,32 +51,38 @@ void onTableChange(redisAsyncContext *c, void *reply, void *privdata)
 
   if (r->type == REDIS_REPLY_ARRAY)
   {
-    if (r->element[2]->str == NULL)
+    size_t arraySize = 0;
+    for (int i = 0; i < sizeof(tableEntry) / sizeof(tableEntry[0]); i++)
     {
-      for (int i = 0; i < sizeof(tableEntry) / sizeof(tableEntry[0]); i++)
-      {
-        redisReply *r = redisCommand(sync_c, "LRANGE %s 0 -1", tableEntry[i]);
-        /*if (r->type == REDIS_REPLY_ARRAY) {
-        }*/
-        freeReplyObject(r);
+      if (r->element[2]->str == NULL || strcmp(tableEntry[i], r->element[2]->str) == 0) {
+
+      redisReply *r = redisCommand(sync_c, "LRANGE %s 0 -1", tableEntry[i]);
+      if (r->type == REDIS_REPLY_ARRAY) {
+        for(;arraySize < TABLE_SIZE; arraySize++) {
+          if(r->element[i][0] - 0x20 == 0) {
+            break;
+          }
+        }
+
+      if(arraySize % 5 != 0) {
+        // TODO: IF TABLE IS NULL QUIT
+        continue;
       }
-    }
-    else
-    {
-      for (int i = 0; i < sizeof(tableEntry) / sizeof(tableEntry[0]); i++)
-      {
-        if (strcmp(tableEntry[i], r->element[2]->str) == 0)
-        {
-          redisReply *r = redisCommand(sync_c, "LRANGE %s 0 -1", tableEntry[i]);
-          /*if (r->type == REDIS_REPLY_ARRAY) {
-            UPDATE MAP HERE
-          }*/
-          freeReplyObject(r);
+
+      size_t arrayDivs = arraySize/5;
+
+      for(int i = 0; i < 5; i ++){
+        for(int j = i*arrayDivs; j < (i+1)*arrayDivs; j++) {
+          // TODO: COPY DOUBLE-CASTED ITEM TO TABLE
+          continue
         }
       }
+
+      freeReplyObject(r);
+      }
     }
-    return;
   }
+    return;
 }
 
 void *listenForCommands()
