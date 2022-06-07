@@ -30,9 +30,9 @@ typedef union {
   uint8_t data_vector[22];
 } adjust_t;
 
-typedef struct {
+typedef struct correctionTable {
   double cols[5][400];
-  size_t colSize = 0;
+  size_t colSize;
   const char* name;
 
 } correctionTable;
