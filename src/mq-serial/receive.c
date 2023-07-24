@@ -17,7 +17,7 @@ int main() {
   attr.mq_msgsize = 32;
   attr.mq_flags = 0;
 
-  mqd_t cmd_mq = mq_open("/cmd_mq", (O_RDWR | O_CREAT), 0666, &attr);
+  mqd_t cmd_mq = mq_open("/cmd_ff", (O_RDWR | O_CREAT), 0666, &attr);
   mqd_t reply_ioc = mq_open("/reply_ioc", (O_RDWR | O_CREAT), 0666, &attr);
   mqd_t reply_ff = mq_open("/reply_ff", (O_RDWR | O_CREAT), 0666, &attr);
 
