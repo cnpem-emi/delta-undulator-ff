@@ -159,6 +159,8 @@ void adjustVector(adjust_t* setpoints,
                   float current4) {
   memcpy(setpoints->msg.currents, (const char[]){current1, current2, current3, current4}, 4);
 
+  // Nessa parte, deve ser implementada a atualizaçãpo de "setpoints->data_vector[i]", com uma possível interpolação.
+  
   // CHECKSUM
   setpoints->msg.checksum = 0;
   for (int i = 0; i < 21; i++)
@@ -259,12 +261,12 @@ int main(void) {
     position[3] =
         reverseBits((uint32_t)prudata2[10]) + (reverseBits8((uint8_t)prudata2[11] & 0xFF) << 29);
 
-    if (position[2] != oldpos) {
+    if (position[2] != oldpos) { // Aqui só está levando em conta a posição 2, provavelmente deve ser repetido para as outras três
       pthread_mutex_lock(&serial_mutex);
       adjustVector(&setpoints, current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE], current_up[position[2] % BUFFER_SIZE],
                    current_up[position[2] % BUFFER_SIZE]);
-      write(fd, setpoints.data_vector, 22);
+      write(fd, setpoints.data_vector, 22); // Aqui envia o valor "data vetor" pela rede 485, não há implementações em data vetor, logo deve-se escrever algo para que esteja no padrão de comunicação das fontes.
       pthread_mutex_unlock(&serial_mutex);
       oldpos = position[2];
     }
