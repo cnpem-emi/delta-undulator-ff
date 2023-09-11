@@ -155,6 +155,18 @@ uint8_t reverseBits8(uint8_t num) {
 void adjustVector(adjust_t* setpoints, int encoder, uint64_t position) {
 
   if !(position %in% current_up[encoder]){
+    // Esta interpolação está sendo feita ponto a ponto, mas, talvez, fique mais rápido gerar as funções lineares antes.
+    // f(x) = f(a) + (x - a)*{[f(b) - f(a)]/(b-a)} ; b > a
+    // f(a) = current_up[encoder][pos]
+    // f(b) = current_up[encoder][pos+1]
+
+    for(int pos = 0; pos < (current_up[encoder].size() - 1); pos++){
+        if current_up[encoder][pos] < position && position < current_up[encoder][pos+1]{
+          data = current_up[encoder][pos] + (position - pos)*((current_up[encoder][pos+1] - current_up[encoder][pos]));
+          break;
+        }
+    }
+    
     INTERPOLAÇÃO;
     current_up[i];
   }
