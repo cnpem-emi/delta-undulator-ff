@@ -155,11 +155,15 @@ uint8_t reverseBits8(uint8_t num) {
 void adjustVector(adjust_t* setpoints, int encoder, uint64_t position) {
 
   if !(position %in% current_up[encoder]){
-    INTERPOLAÇÃO
+    INTERPOLAÇÃO;
+    current_up[i];
   }
- 
-  current_up[i]
 
+  else {
+    data = current_up[encoder];
+  } 
+  
+  setpoints->data_vector[encoder] = data;
 
   // CHECKSUM
   setpoints->msg.checksum = 0;
@@ -169,9 +173,6 @@ void adjustVector(adjust_t* setpoints, int encoder, uint64_t position) {
   if !setpoints->msg.checksum {   
     memcpy(setpoints->msg.currents, (const char[]){current1, current2, current3, current4}, 4);
   }
-  // Nessa parte, deve ser implementada a atualizaçãpo de "setpoints->data_vector[i]", com uma possível interpolação.
-  
-  
 }
 
 int main(void) {
