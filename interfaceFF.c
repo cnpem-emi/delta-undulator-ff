@@ -165,9 +165,10 @@ void adjustVector(adjust_t* setpoints, int encoder, uint64_t position) {
   setpoints->msg.checksum = 0;
   for (int i = 0; i < 21; i++)
     setpoints->msg.checksum -= setpoints->data_vector[i];
-  
-  memcpy(setpoints->msg.currents, (const char[]){current1, current2, current3, current4}, 4);
 
+  if !setpoints->msg.checksum {   
+    memcpy(setpoints->msg.currents, (const char[]){current1, current2, current3, current4}, 4);
+  }
   // Nessa parte, deve ser implementada a atualizaçãpo de "setpoints->data_vector[i]", com uma possível interpolação.
   
   
