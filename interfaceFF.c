@@ -154,6 +154,8 @@ uint8_t reverseBits8(uint8_t num) {
 
 void adjustVector(adjust_t* setpoints, int encoder, uint64_t position) {
 
+  float data = 0;
+
   if !(position %in% current_up[encoder]){
     // Esta interpolação está sendo feita ponto a ponto, mas, talvez, fique mais rápido gerar as funções lineares antes.
     // f(x) = f(a) + (x - a)*{[f(b) - f(a)]/(b-a)} ; b > a
@@ -166,16 +168,13 @@ void adjustVector(adjust_t* setpoints, int encoder, uint64_t position) {
           break;
         }
     }
-    
-    INTERPOLAÇÃO;
-    current_up[i];
   }
 
   else {
-    data = current_up[encoder];
+    data = current_up[encoder][position];
   } 
   
-  setpoints->data_vector[encoder] = data;
+  setpoints->data_vector[encoder] = encoded_data; //Ainda é preciso transformar data para o padrão BSMP
 
   // CHECKSUM
   setpoints->msg.checksum = 0;
@@ -183,7 +182,7 @@ void adjustVector(adjust_t* setpoints, int encoder, uint64_t position) {
     setpoints->msg.checksum -= setpoints->data_vector[i];
 
   if !setpoints->msg.checksum {   
-    memcpy(setpoints->msg.currents, (const char[]){current1, current2, current3, current4}, 4);
+    memcpy(setpoints->msg.currents, (const char[]){encoded_data[0], encoded_data[1], encoded_data[2], encoded_data[3]}, 4);
   }
 }
 
@@ -290,8 +289,11 @@ int main(void) {
         pthread_mutex_lock(&serial_mutex);
         
         adjustVector(&setpoints, enc, position[enc]);
-        write(fd, setpoints.data_vector, 22); // Aqui envia o valor "data vetor" pela rede 485, não há implementações em data vetor, logo deve-se escrever algo para que esteja no padrão de comunicação das fontes.
         
+        if !setpoints->msg.checksum{ 
+          write(fd, setpoints.data_vector, 22); // Aqui envia o valor "data vetor" pela rede 485, não há implementações em data vetor, logo deve-se escrever algo para que esteja no padrão de comunicação das fontes.
+        }
+
         pthread_mutex_unlock(&serial_mutex);
         oldposition[enc] = position[enc];
         }
