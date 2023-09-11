@@ -152,19 +152,25 @@ uint8_t reverseBits8(uint8_t num) {
   return num;
 }
 
-void adjustVector(adjust_t* setpoints,
-                  float current1,
-                  float current2,
-                  float current3,
-                  float current4) {
-  memcpy(setpoints->msg.currents, (const char[]){current1, current2, current3, current4}, 4);
+void adjustVector(adjust_t* setpoints, int encoder, uint64_t position) {
 
-  // Nessa parte, deve ser implementada a atualizaçãpo de "setpoints->data_vector[i]", com uma possível interpolação.
-  
+  if !(position %in% current_up[encoder]){
+    INTERPOLAÇÃO
+  }
+ 
+  current_up[i]
+
+
   // CHECKSUM
   setpoints->msg.checksum = 0;
   for (int i = 0; i < 21; i++)
     setpoints->msg.checksum -= setpoints->data_vector[i];
+  
+  memcpy(setpoints->msg.currents, (const char[]){current1, current2, current3, current4}, 4);
+
+  // Nessa parte, deve ser implementada a atualizaçãpo de "setpoints->data_vector[i]", com uma possível interpolação.
+  
+  
 }
 
 int main(void) {
@@ -204,7 +210,7 @@ int main(void) {
   int fdm = open("/dev/mem", O_RDWR | O_SYNC);
 
   uint64_t position[] = {0, 0, 0, 0};
-  uint64_t oldpos = 0;
+  uint64_t oldposition[] = {0, 0, 0, 0};
 
   adjust_t setpoints = {.msg.config = {0x01, 0x50, 0x00, 0x11, 0x11}, .msg.checksum = 0x8d};
 
@@ -225,7 +231,11 @@ int main(void) {
       reverseBits((uint32_t)prudata2[2]) + (reverseBits8((uint8_t)prudata2[3] & 0xFF) << 29);
   position[3] =
       reverseBits((uint32_t)prudata2[10]) + (reverseBits8((uint8_t)prudata2[11] & 0xFF) << 29);
-  oldpos = position[2];
+  
+  oldposition[0] = position[0];
+  oldposition[1] = position[1];
+  oldposition[2] = position[2];
+  oldposition[3] = position[3];
 
   pthread_t thisThread = pthread_self();
   pthread_t cmdThread;
@@ -261,16 +271,17 @@ int main(void) {
     position[3] =
         reverseBits((uint32_t)prudata2[10]) + (reverseBits8((uint8_t)prudata2[11] & 0xFF) << 29);
 
-    if (position[2] != oldpos) { // Aqui só está levando em conta a posição 2, provavelmente deve ser repetido para as outras três
-      pthread_mutex_lock(&serial_mutex);
-      adjustVector(&setpoints, current_up[position[2] % BUFFER_SIZE],
-                   current_up[position[2] % BUFFER_SIZE], current_up[position[2] % BUFFER_SIZE],
-                   current_up[position[2] % BUFFER_SIZE]);
-      write(fd, setpoints.data_vector, 22); // Aqui envia o valor "data vetor" pela rede 485, não há implementações em data vetor, logo deve-se escrever algo para que esteja no padrão de comunicação das fontes.
-      pthread_mutex_unlock(&serial_mutex);
-      oldpos = position[2];
+    for(int enc = 0; enc < 4; enc++){
+      if (position[enc] != oldposition[enc]) {
+        pthread_mutex_lock(&serial_mutex);
+        
+        adjustVector(&setpoints, enc, position[enc]);
+        write(fd, setpoints.data_vector, 22); // Aqui envia o valor "data vetor" pela rede 485, não há implementações em data vetor, logo deve-se escrever algo para que esteja no padrão de comunicação das fontes.
+        
+        pthread_mutex_unlock(&serial_mutex);
+        oldposition[enc] = position[enc];
+        }
     }
   }
-
   return 0;
 }
