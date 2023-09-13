@@ -257,8 +257,24 @@ int main(void) {
   oldposition[2] = position[2];
   oldposition[3] = position[3];
 
+  const size_t capacity = sizeof s_position / sizeof s_position[0];
+  hcreate(capacity);
+
   pthread_t thisThread = pthread_self();
   pthread_t cmdThread;
+
+
+  for (size_t i = 0; i < capacity ; i++) {
+       l_pos.key = s_position[i];
+       l_pos.data = (void *) s_current[i];
+
+       l_curr = hsearch(l_pos, ENTER);
+
+       if (l_curr == NULL) {
+           fprintf(stderr, "entry failed\n");
+           exit(EXIT_FAILURE);
+       }
+   }
 
   pthread_create(&cmdThread, NULL, listenForCommands, NULL);
   pthread_mutex_init(&serial_mutex, NULL);
@@ -306,5 +322,7 @@ int main(void) {
         }
     }
   }
+  hdestroy();
+  exit(EXIT_SUCCESS);
   return 0;
 }
