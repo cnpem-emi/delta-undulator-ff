@@ -9,6 +9,7 @@
 #include <sys/mman.h>
 #include <termios.h>
 #include <unistd.h>
+#include <search.h>
 
 #define PRU1_ADDR 0x4b200000
 #define PRU2_ADDR 0x4b280000
@@ -46,6 +47,9 @@ correctionTable tableEntry[5] = {{.name = "Array:Test-Mon", .colSize = 0},
 int fd;
 pthread_mutex_t serial_mutex;
 redisContext* sync_c;
+
+ENTRY l_pos;
+ENTRY *l_curr;
 
 void onTableChange(redisAsyncContext* c, void* reply, void* privdata) {
   redisReply* r = reply;
@@ -155,24 +159,27 @@ uint8_t reverseBits8(uint8_t num) {
 void adjustVector(adjust_t* setpoints, int encoder, uint64_t position) {
 
   float data = 0;
+  l_pos.key = position;
+  l_curr = hsearch(l_pos, FIND);
 
-  if !(position %in% current_up[encoder]){
-    // Esta interpolação está sendo feita ponto a ponto, mas, talvez, fique mais rápido gerar as funções lineares antes.
-    // f(x) = f(a) + (x - a)*{[f(b) - f(a)]/(b-a)} ; b > a
-    // f(a) = current_up[encoder][pos]
-    // f(b) = current_up[encoder][pos+1]
+  if(l_curr){
+        data = l_curr->data;
+    }
 
-    for(int pos = 0; pos < (current_up[encoder].size() - 1); pos++){
-        if current_up[encoder][pos] < position && position < current_up[encoder][pos+1]{
-          data = current_up[encoder][pos] + (position - pos)*((current_up[encoder][pos+1] - current_up[encoder][pos]));
-          break;
+  else{
+    // Esta interpolação está sendo feita ponto a ponto, mas, talvez, fique mais rápido gerar as funções lineares antes
+
+    for(int pos = 0; pos < (sizeof(s_current)/sizeof(s_current[0]) - 1); pos++){
+          if((atof(s_position[pos]) < atof(position)) && (atof(position) < atof(s_position[pos+1]))){
+              float ang = (atof(s_current[pos+1]) - atof(s_current[pos]))/(atof(s_position[pos+1]) - atof(s_position[pos]));
+              float lin =  atof(s_current[pos]) - ang * atof(s_position[pos]);
+
+              data = ang * atof(position) + lin;
+            
+              break;
         }
     }
   }
-
-  else {
-    data = current_up[encoder][position];
-  } 
   
   setpoints->data_vector[encoder] = encoded_data; //Ainda é preciso transformar data para o padrão BSMP
 
