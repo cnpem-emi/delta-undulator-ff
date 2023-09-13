@@ -239,9 +239,10 @@ int main(void) {
   volatile ulong* prudata2 =
       (ulong*)mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fdm, PRU2_ADDR + SHRAM_OFFSET);
 
-  // SIMULATED VECTOR
-  for (i = 0; i < BUFFER_SIZE; i++)
-    current_up[i] = i * 0.0001;
+  // SIMULATED VECTORS
+  static char *s_position[] = {"0", "45", "65", "89", "123", "435", "656", "789"};
+  static char *s_current[] = {"10", "52", "56", "87", "123", "564", "890", "678"};
+  //
 
   position[0] =
       reverseBits((uint32_t)prudata1[2]) + (reverseBits8((uint8_t)prudata1[3] & 0xFF) << 29);
