@@ -1,10 +1,14 @@
-#include <stdio.h>
+#include <hiredis/adapters/libevent.h>
+#include <mqueue.h>
+#include <poll.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <hiredis/hiredis.h>
-#include <hiredis/adapters/libevent.h>
+#include <sys/mman.h>
+#include <termios.h>
 #include <unistd.h>
-#include <pthread.h>
+#include <stdio.h>
+#include <hiredis/hiredis.h>
 
 //gcc redistest.c -o redistest -I /usr/local/include/hiredis -lhiredis -levent_core
 
@@ -73,7 +77,7 @@ void onTableChange(redisAsyncContext* c, void* reply, void* privdata) {
         
         for (int j = 0; j < 5; j++) {
           for (int k = j * arrayDivs; k < (j + 1) * arrayDivs; k++){
-            tableEntry[i].cols[j][k - j * arrayDivs] = strtod(r->element[k]->str, NULL);
+            tableEntry[i].cols[j][k - j * arrayDivs] = strtod(r->element[k]->str, NULL); // Comando duplicado "/ entretanto, ao escrever diretamente em s_cirrent e s_position, percebi que os dados não eram salvos de maneira correta.
 
             if(i){
                s_current[j] = tableEntry[i].cols[j][k - j * arrayDivs];
@@ -108,9 +112,58 @@ void* listenForCommands() {
     printf("Redis server not available!\n");
   }
 
+  attr.mq_maxmsg = 1000;
+  attr.mq_msgsize = 32;
+  attr.mq_flags = 0;
+
+  mqd_t cmd_mq = mq_open("/cmd_mq", (O_RDWR | O_CREAT), 0666, &attr);
+  mqd_t reply_ioc = mq_open("/reply_ioc", (O_RDWR | O_CREAT), 0666, &attr);
+  size_t write_size, reply_size;
+  char cmd_buf[32];
+  char reply_buf[32];
+
+  unsigned int priority;
+
+  struct pollfd pfds[1];
+  pfds[0].fd = fd;
+  pfds[0].events = POLLIN;
+
+  for (;;) {
+    write_size = mq_receive(cmd_mq, cmd_buf, sizeof(cmd_buf), &priority);
+    pthread_mutex_lock(&serial_mutex);
+    write(fd, cmd_buf, write_size);
+
+    if (poll(pfds, 1, 1) < 1) {
+      mq_send(reply_ioc, "\xee", 1, priority);
+    } else {
+      reply_size = read(fd, &reply_buf, sizeof(reply_buf));
+      mq_send(reply_ioc, reply_buf, reply_size, priority);
+    }
+
+    pthread_mutex_unlock(&serial_mutex);
+  }
 }
 
-void adjustVector(char * position) {
+uint32_t reverseBits(uint32_t num) {
+  num = (num & 0xffff0000) >> 16 | (num & 0x0000ffff) << 16;
+  num = (num & 0xff00ff00) >> 8 | (num & 0x00ff00ff) << 8;
+  num = (num & 0xf0f0f0f0) >> 4 | (num & 0x0f0f0f0f) << 4;
+  num = (num & 0xcccccccc) >> 2 | (num & 0x33333333) << 2;
+  num = (num & 0xaaaaaaaa) >> 1 | (num & 0x55555555) << 1;
+
+  return num;
+}
+
+uint8_t reverseBits8(uint8_t num) {
+  num = (num & 0xf0) >> 4 | (num & 0x0f) << 4;
+  num = (num & 0xcc) >> 2 | (num & 0x33) << 2;
+  num = (num & 0xaa) >> 1 | (num & 0x55) << 1;
+
+  return num;
+}
+
+
+void adjustVector(char * position) { //Essa funcao nao usa algoritmos de busca binaria, deve ser avaliado se compromete a eficiência do FF
 
     float result;
 
@@ -126,11 +179,85 @@ void adjustVector(char * position) {
         break;
     }
   }
+
+  setpoints->data_vector[encoder] = encoded_data; //Ainda é preciso transformar data para o padrão BSMP
+
+  // CHECKSUM
+  setpoints->msg.checksum = 0;
+  for (int i = 0; i < 21; i++)
+    setpoints->msg.checksum -= setpoints->data_vector[i];
+
+  if !setpoints->msg.checksum {
+    memcpy(setpoints->msg.currents, (const char[]){encoded_data[0], encoded_data[1], encoded_data[2], encoded_data[3]}, 4);
+  }
+
 }
 
 
-
 int main (int argc, char **argv) {
+
+  fd = open("/dev/ttyUSB0", O_RDWR | O_NOCTTY | O_NDELAY);
+  if (fd == -1) {
+    perror("No valid serial device connected");
+    return -1;
+  }
+  struct termios tty;
+  tcgetattr(fd, &tty);
+
+  tty.c_cflag &= ~PARENB;
+  tty.c_cflag &= ~CSTOPB;
+  tty.c_cflag &= ~CSIZE;
+  tty.c_cflag |= CS8 | CREAD | CLOCAL;
+
+  tty.c_lflag &= ~ISIG;
+  tty.c_lflag &= ~ICANON;
+
+  tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+  tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL);
+
+  tty.c_oflag &= ~OPOST;
+  tty.c_oflag &= ~ONLCR;
+
+  tty.c_cc[VTIME] = 0;
+  tty.c_cc[VMIN] = 0;
+
+  cfsetispeed(&tty, BAUD);
+  cfsetospeed(&tty, BAUD);
+
+  tcsetattr(fd, TCSANOW, &tty);  // TODO: Handle errors
+
+  int i;
+  float current_up[BUFFER_SIZE];
+
+  int fdm = open("/dev/mem", O_RDWR | O_SYNC);
+
+  uint64_t position[] = {0, 0, 0, 0};
+  uint64_t oldposition[] = {0, 0, 0, 0};
+
+  adjust_t setpoints = {.msg.config = {0x01, 0x50, 0x00, 0x11, 0x11}, .msg.checksum = 0x8d};
+
+  volatile ulong* prudata1 =
+      (ulong*)mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fdm, PRU1_ADDR + SHRAM_OFFSET);
+  volatile ulong* prudata2 =
+      (ulong*)mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fdm, PRU2_ADDR + SHRAM_OFFSET);
+
+
+
+  position[0] =
+      reverseBits((uint32_t)prudata1[2]) + (reverseBits8((uint8_t)prudata1[3] & 0xFF) << 29);
+  position[1] =
+      reverseBits((uint32_t)prudata1[10]) + (reverseBits8((uint8_t)prudata1[11] & 0xFF) << 29);
+  position[2] =
+      reverseBits((uint32_t)prudata2[2]) + (reverseBits8((uint8_t)prudata2[3] & 0xFF) << 29);
+  position[3] =
+      reverseBits((uint32_t)prudata2[10]) + (reverseBits8((uint8_t)prudata2[11] & 0xFF) << 29);
+
+  oldposition[0] = position[0];
+  oldposition[1] = position[1];
+  oldposition[2] = position[2];
+  oldposition[3] = position[3];
+
+
 
   pthread_t thisThread = pthread_self();
   pthread_t cmdThread;
@@ -138,21 +265,50 @@ int main (int argc, char **argv) {
   pthread_create(&cmdThread, NULL, listenForCommands, NULL);
   pthread_mutex_init(&serial_mutex, NULL);
 
+  cpu_set_t mainCpuSet;
+  cpu_set_t cmdCpuSet;
+
+  CPU_ZERO(&mainCpuSet);
+  CPU_ZERO(&cmdCpuSet);
+
+  CPU_SET(1, &mainCpuSet);
+  CPU_SET(0, &cmdCpuSet);
+
   struct sched_param params;
   params.sched_priority = sched_get_priority_max(SCHED_FIFO);
 
   pthread_setschedparam(thisThread, SCHED_FIFO, &params);
+  // pthread_setschedparam(cmdThread, SCHED_FIFO, &params);
 
- // pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), &mainCpuSet);
- // pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), &cmdCpuSet);
+  pthread_setaffinity_np(thisThread, sizeof(cpu_set_t), &mainCpuSet);
+  pthread_setaffinity_np(cmdThread, sizeof(cpu_set_t), &cmdCpuSet);
 
 
   redisReply *reply;
 
-  /* PINGs */
-  while(1){
-     adjustVector("200");
-     printf("Here\n");
-     sleep(10);
+  for (;;) {
+    position[0] =
+        reverseBits((uint32_t)prudata1[2]) + (reverseBits8((uint8_t)prudata1[3] & 0xFF) << 29);
+    position[1] =
+        reverseBits((uint32_t)prudata1[10]) + (reverseBits8((uint8_t)prudata1[11] & 0xFF) << 29);
+    position[2] =
+        reverseBits((uint32_t)prudata2[2]) + (reverseBits8((uint8_t)prudata2[3] & 0xFF) << 29);
+    position[3] =
+        reverseBits((uint32_t)prudata2[10]) + (reverseBits8((uint8_t)prudata2[11] & 0xFF) << 29);
+
+    for(int enc = 0; enc < 4; enc++){
+      if (position[enc] != oldposition[enc]) {
+        pthread_mutex_lock(&serial_mutex);
+
+        adjustVector(&setpoints, enc, position[enc]);
+
+        if !setpoints->msg.checksum{
+          write(fd, setpoints.data_vector, 22); // Aqui envia o valor "data vetor" pela rede 485, não há implementações em data vetor, logo deve-se escrever algo para que esteja no padrão de comunicação das fontes.
+        }
+
+        pthread_mutex_unlock(&serial_mutex);
+        oldposition[enc] = position[enc];
+        }
+    }
   }
 }
