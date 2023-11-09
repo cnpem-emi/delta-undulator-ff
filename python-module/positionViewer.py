@@ -7,6 +7,8 @@
 
 import mmap
 import os
+from time import sleep
+import redis
 
 
 # ----- ADDRESS AND OFFSETS - AM572x
@@ -29,6 +31,20 @@ pru_data = {
             2:mmap.mmap(fd, length=0x1000, access=mmap.ACCESS_WRITE, offset=(PRU2_ADDR + SHRAM_OFFSET))
             }
 
+# ----- Polarizations
+    #PRUs [0.0, 0.1, 1.0, 1.1]
+
+POL = {
+    0:[0,0,0,0],        # ZeroK
+    1:[0,0,0,0],        # Circular Pos
+    2:[0,0,0,0],        # Circular Neg
+    3:[0,0,0,0],        # Linear Hor
+    4:[0,0,0,0]         # Linear Ver
+}
+
+pos_encoder = [0,0,0,0]
+
+client = redis.Redis("127.0.0.1")
 
 class encoderHeidenhain:
     def __init__(self, pru_num):
@@ -65,5 +81,17 @@ class encoderHeidenhain:
         else:
             return pru_data[PRUS[self.pru]["subsystem"]][offset]
 
-if __name__ == "__main__":
-    exit()
+encoders0 = encoderHeidenhain(0)
+encoders1 = encoderHeidenhain(1)
+encoders2 = encoderHeidenhain(2)
+encoders3 = encoderHeidenhain(3)
+
+while(1):
+    for prus in range(4):
+        pos_encoder[prus] = globals()[f'encoders{prus}'].getPosition()
+
+    for pol in range(5):
+        if pos_encoder == POL[pol]:
+            client.set("DELTAPOL", pol)
+
+    sleep(1)
