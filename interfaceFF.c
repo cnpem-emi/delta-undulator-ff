@@ -74,7 +74,13 @@ void onTableChange(redisAsyncContext* c, void* reply, void* privdata) {
         tableEntry[i].colSize = arrayDivs;
 
         pthread_mutex_lock(&serial_mutex);
+
+        //Aqui, deve ser implementado uma maneira de se descobrir a polarizacao do delta. Inicialmente a ideia será ler uma variavel redis.
         
+        
+        redisReply* p = redisCommand(sync_c, "GET DELTAPOL");
+        
+
         for (int j = 0; j < 5; j++) {
           for (int k = j * arrayDivs; k < (j + 1) * arrayDivs; k++){
             tableEntry[i].cols[j][k - j * arrayDivs] = strtod(r->element[k]->str, NULL); // Comando duplicado "/ entretanto, ao escrever diretamente em s_cirrent e s_position, percebi que os dados não eram salvos de maneira correta.
@@ -106,7 +112,7 @@ void* listenForCommands() {
 
   if (!sync_c->err && !c->err) {
     redisLibeventAttach(c, base);
-    redisAsyncCommand(c, onTableChange, NULL, "SUBSCRIBE ArraySubscription");
+    redisAsyncCommand(c, onTableChange, NULL, "SUBSCRIBE ArraySubscription PolSubscription");
     event_base_dispatch(base);
   } else {
     printf("Redis server not available!\n");
@@ -297,7 +303,7 @@ int main (int argc, char **argv) {
         reverseBits((uint32_t)prudata2[10]) + (reverseBits8((uint8_t)prudata2[11] & 0xFF) << 29);
 
     for(int enc = 0; enc < 4; enc++){
-      if (position[enc] != oldposition[enc]) {
+      if ((position[enc] != oldposition[enc]) && enableFF) { // A variável enableFF controlará quando haverá a correção de orbita. O IOC do FF rápido deve alterar esse parametro.
         pthread_mutex_lock(&serial_mutex);
 
         adjustVector(&setpoints, enc, position[enc]);
