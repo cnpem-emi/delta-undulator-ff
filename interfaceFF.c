@@ -104,6 +104,8 @@ void* listenForCommands() {
     redisLibeventAttach(c, base);
     redisAsyncCommand(c, onTableChange, NULL, "SUBSCRIBE ArraySubscription");
     event_base_dispatch(base);
+  } else {
+    printf("Redis server not available!\n");
   }
 
 }
