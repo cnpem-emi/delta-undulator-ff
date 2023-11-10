@@ -32,24 +32,37 @@ typedef struct correctionTable {
 
 } correctionTable;
 
-//correctionTable tableEntry[5] = {{.name = "Array:Test-Mon", .colSize = 0},
-//                                 {.name = "Array2:Test-Mon", .colSize = 0},
-//                                 {.name = "Array3:Test-Mon", .colSize = 0},
-//                                 {.name = "Array4:Test-Mon", .colSize = 0},
-//                                 {.name = "Array5:Test-Mon", .colSize = 0}};
-
-correctionTable tableEntry[2] = {{.name = "PositionMon", .colSize = 0},
-                                 {.name = "CurrentMon", .colSize = 0}};
+correctionTable tableEntry[8] = {{.name = "PosCSDMon", .colSize = 0},
+                                 {.name = "CurCSDMon", .colSize = 0},
+                                 {.name = "PosCSEMon", .colSize = 0},
+                                 {.name = "CurCSEMon", .colSize = 0},
+                                 {.name = "PosCIDMon", .colSize = 0},
+                                 {.name = "CurCIDMon", .colSize = 0},
+                                 {.name = "PosCIEMon", .colSize = 0},
+                                 {.name = "CurCIEMon", .colSize = 0},
+                                 };
 
 pthread_mutex_t serial_mutex;
 redisContext* sync_c;
 
+redisReply* pol;
+
 char str3[100];
 char str4[100];
 
-static double s_position[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-static double s_current[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static double s_position[5] = {{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},         //CSD
+                               {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},          //CSE
+                               {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},          //CID
+                               {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}} * 5};    //CIE
 
+                               //5 polarizacoes
+
+static double s_current[5] = {{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},           //CSD
+                              {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},           //CSE
+                              {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},           //CID
+                              {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}} * 5};     //CIE
+
+                              //5 polarizacoes
 
 void onTableChange(redisAsyncContext* c, void* reply, void* privdata) {
   redisReply* r = reply;
@@ -76,20 +89,18 @@ void onTableChange(redisAsyncContext* c, void* reply, void* privdata) {
         pthread_mutex_lock(&serial_mutex);
 
         //Aqui, deve ser implementado uma maneira de se descobrir a polarizacao do delta. Inicialmente a ideia será ler uma variavel redis.
-        
-        
-        redisReply* p = redisCommand(sync_c, "GET DELTAPOL");
-        
+
+        pol = redisCommand(sync_c, "GET DELTAPOL");
 
         for (int j = 0; j < 5; j++) {
           for (int k = j * arrayDivs; k < (j + 1) * arrayDivs; k++){
             tableEntry[i].cols[j][k - j * arrayDivs] = strtod(r->element[k]->str, NULL); // Comando duplicado "/ entretanto, ao escrever diretamente em s_cirrent e s_position, percebi que os dados não eram salvos de maneira correta.
 
-            if(i){
-               s_current[j] = tableEntry[i].cols[j][k - j * arrayDivs];
+            if(i % 2){
+               s_current[pol][i][j] = tableEntry[i].cols[j][k - j * arrayDivs];
             }
             else{
-               s_position[j] = tableEntry[i].cols[j][k - j * arrayDivs];
+               s_position[pol][i][j] = tableEntry[i].cols[j][k - j * arrayDivs];
                }
             //printf("%d %lf \n", i, tableEntry[i].cols[j][k - j * arrayDivs]);
             }
@@ -168,17 +179,16 @@ uint8_t reverseBits8(uint8_t num) {
   return num;
 }
 
-
-void adjustVector(char * position) { //Essa funcao nao usa algoritmos de busca binaria, deve ser avaliado se compromete a eficiência do FF
+void adjustVector(adjust_t* setpoints, int encoder, char * position) { //Essa funcao nao usa algoritmos de busca binaria, deve ser avaliado se compromete a eficiência do FF
 
     float result;
 
     // Esta interpolação está sendo feita ponto a ponto, mas, talvez, fique mais rápido gerar as funções lineares antes
-    for(int pos = 0; pos < (sizeof(s_current)/sizeof(s_current[0]) - 1); pos++){
-      printf("%f %f %f\n", atof(position), s_position[pos], s_position[pos+1]);
-      if((s_position[pos] <= atof(position)) && (atof(position) <= s_position[pos+1])){
-        float ang = (s_current[pos+1] - s_current[pos])/(s_position[pos+1] - s_position[pos]);
-        float lin =  s_current[pos] - ang * s_position[pos];
+    for(int pos = 0; pos < (sizeof(s_current[pol][encoder])/sizeof(s_current[pol][encoder][0]) - 1); pos++){
+
+      if((s_position[pol][encoder][pos] <= atof(position)) && (atof(position) <= s_position[pol][encoder][pos+1])){
+        float ang = (s_current[pol][encoder][pos+1] - s_current[pol][encoder][pos])/(s_position[pol][encoder][pos+1] - s_position[pol][encoder][pos]);
+        float lin =  s_current[pol][encoder][pos] - ang * s_position[pol][encoder][pos];
 
         result = ang * atof(position) + lin;
         printf("%s -> %f\n", position, ang*atof(position) + lin);
@@ -302,18 +312,18 @@ int main (int argc, char **argv) {
     position[3] =
         reverseBits((uint32_t)prudata2[10]) + (reverseBits8((uint8_t)prudata2[11] & 0xFF) << 29);
 
-    for(int enc = 0; enc < 4; enc++){
-      if ((position[enc] != oldposition[enc]) && enableFF) { // A variável enableFF controlará quando haverá a correção de orbita. O IOC do FF rápido deve alterar esse parametro.
+    for(int encoder = 0; encoder < 4; encoder++){
+      if ((position[encoder] != oldposition[encoder]) && enableFF) { // A variável enableFF controlará quando haverá a correção de orbita. O IOC do FF rápido deve alterar esse parametro.
         pthread_mutex_lock(&serial_mutex);
 
-        adjustVector(&setpoints, enc, position[enc]);
+        adjustVector(&setpoints, encoder, position[enc]);
 
         if !setpoints->msg.checksum{
           write(fd, setpoints.data_vector, 22); // Aqui envia o valor "data vetor" pela rede 485, não há implementações em data vetor, logo deve-se escrever algo para que esteja no padrão de comunicação das fontes.
         }
 
         pthread_mutex_unlock(&serial_mutex);
-        oldposition[enc] = position[enc];
+        oldposition[encoder] = position[encoder];
         }
     }
   }
